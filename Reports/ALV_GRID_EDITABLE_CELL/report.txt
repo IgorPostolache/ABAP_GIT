@@ -140,7 +140,8 @@ CLASS lcl_report IMPLEMENTATION.
 
       DATA:
             v_edited TYPE char1,
-            ls_pasajeros TYPE zip_pasajeros.
+            lt_aux_pasajeros TYPE TABLE OF zip_sflight,
+            ls_aux_pasajeros LIKE LINE OF lt_aux_pasajeros.
 
       CALL METHOD g_grid->check_changed_data
         IMPORTING
@@ -149,13 +150,19 @@ CLASS lcl_report IMPLEMENTATION.
       IF v_edited = 'X'.
 
         LOOP AT gt_outtab ASSIGNING FIELD-SYMBOL(<gs_outtab>).
-          MOVE-CORRESPONDING <gs_outtab> TO ls_pasajeros .
-          MODIFY zip_sflight FROM ls_pasajeros .
+          MOVE-CORRESPONDING <gs_outtab> TO ls_aux_pasajeros .
+          APPEND ls_aux_pasajeros TO lt_aux_pasajeros.
         ENDLOOP.
 
-        switch_edit_mode(  ).
+        MODIFY zip_sflight FROM TABLE lt_aux_pasajeros .
 
-        MESSAGE `DB successefull updated.` TYPE 'I'.
+        IF sy-subrc EQ 0.
+          switch_edit_mode(  ).
+          MESSAGE `DB successefull updated.` TYPE 'I'.
+        ELSE.
+          switch_edit_mode(  ).
+          MESSAGE `DB not updated.` TYPE 'E' DISPLAY LIKE 'I'.
+        ENDIF.
 
       ENDIF.
 
