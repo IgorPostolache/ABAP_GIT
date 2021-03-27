@@ -27,6 +27,9 @@ CLASS lcl_report DEFINITION.
       check_if_rows_deleted
         IMPORTING
             er_data_changed TYPE REF TO cl_alv_changed_data_protocol,
+      check_if_rows_changed
+        IMPORTING
+            er_data_changed TYPE REF TO cl_alv_changed_data_protocol,
       exit_program,
       switch_edit_mode,
       display_grid,
@@ -45,11 +48,34 @@ CLASS lcl_report DEFINITION.
       lt_celltab   TYPE lvc_t_styl,
       l_index      TYPE i,
       ls_styletab  TYPE lvc_t_styl,
-      delete_oper  TYPE c.
+      delete_oper  TYPE c,
+      update_oper  TYPE c.
 
 ENDCLASS.
 
 CLASS lcl_report IMPLEMENTATION.
+
+  METHOD check_if_rows_changed.
+    DESCRIBE TABLE er_data_changed->mt_good_cells LINES DATA(lv_num_changed_rows).
+
+    IF lv_num_changed_rows > 0.
+      DATA:
+            dl_ins_row TYPE lvc_s_moce,
+            lt_aux_pasajeros TYPE TABLE OF zip_sflight.
+
+      LOOP AT er_data_changed->mt_good_cells ASSIGNING FIELD-SYMBOL(<row>).
+
+        IF <row>-error = 'X' OR <row>-value = ''.
+          EXIT.
+        ENDIF.
+
+      ENDLOOP.
+
+      update_oper = 'X'.
+
+    ENDIF.
+
+  ENDMETHOD.
 
   METHOD check_if_rows_deleted.
 
@@ -87,6 +113,7 @@ CLASS lcl_report IMPLEMENTATION.
   METHOD handle_chaged_data.
 
     check_if_rows_deleted( er_data_changed ).
+    check_if_rows_changed( er_data_changed ).
 
   ENDMETHOD.
 
@@ -189,7 +216,8 @@ CLASS lcl_report IMPLEMENTATION.
         IMPORTING
           e_valid = v_edited.
 
-      IF v_edited = 'X' AND delete_oper IS INITIAL.
+      IF v_edited = 'X' AND delete_oper IS INITIAL AND update_oper = 'X'.
+
         DATA:
                 lt_aux_pasajeros TYPE TABLE OF zip_sflight,
                 ls_aux_pasajeros LIKE LINE OF lt_aux_pasajeros.
@@ -208,6 +236,9 @@ CLASS lcl_report IMPLEMENTATION.
           switch_edit_mode(  ).
           MESSAGE `DB not updated.` TYPE 'E' DISPLAY LIKE 'I'.
         ENDIF.
+
+        update_oper = ''.
+
       ENDIF.
     ENDIF.
 
