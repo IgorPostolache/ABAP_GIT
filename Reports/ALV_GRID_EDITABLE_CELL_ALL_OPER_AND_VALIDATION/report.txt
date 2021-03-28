@@ -1,0 +1,374 @@
+*&---------------------------------------------------------------------*
+*& Module Pool       ZIP_P_TEST_000
+*&
+*&---------------------------------------------------------------------*
+*&
+*&
+*&---------------------------------------------------------------------*
+
+PROGRAM zip_p_test_000.
+
+DATA: ok_code            LIKE sy-ucomm,
+      save_ok            LIKE sy-ucomm,
+
+      g_container        TYPE scrfname VALUE 'BCALV_GRID_DEMO_0100_CONT1',
+      g_custom_container TYPE REF TO cl_gui_custom_container,
+      g_grid             TYPE REF TO cl_gui_alv_grid,
+      gs_layout          TYPE lvc_s_layo.
+
+DATA: BEGIN OF gt_outtab OCCURS 0.
+        INCLUDE STRUCTURE zip_sflight.
+DATA: celltab TYPE lvc_t_styl.
+DATA: END OF gt_outtab.
+
+CLASS lcl_report DEFINITION.
+
+  PUBLIC SECTION.
+    CLASS-METHODS:
+      check_if_rows_changed
+            IMPORTING
+                er_data_changed TYPE REF TO cl_alv_changed_data_protocol,
+      check_if_rows_deleted
+            IMPORTING
+                er_data_changed TYPE REF TO cl_alv_changed_data_protocol,
+      display_grid,
+      edit_style,
+      exit_program,
+      save,
+      switch_edit_mode,
+      validate_age
+        IMPORTING
+            is_mod_row TYPE lvc_s_modi
+            ir_changed_data TYPE REF TO cl_alv_changed_data_protocol,
+      validate_dni
+        IMPORTING
+            is_mod_row TYPE lvc_s_modi
+            ir_changed_data TYPE REF TO cl_alv_changed_data_protocol.
+
+    METHODS:
+        get_data,
+        handle_chaged_data
+            FOR EVENT data_changed OF cl_gui_alv_grid
+                IMPORTING er_data_changed.
+
+  PRIVATE SECTION.
+    CLASS-DATA:
+      lt_del_pasajeros  TYPE TABLE OF zip_sflight,
+      lv_error          TYPE c,
+      lt_pasajeros      TYPE TABLE OF zip_sflight,
+      update_oper       TYPE c,
+      save_oper         TYPE c.
+
+ENDCLASS. "LCL_REPORT DEFINITION
+
+CLASS lcl_report IMPLEMENTATION.
+
+  METHOD check_if_rows_changed.
+    DESCRIBE TABLE er_data_changed->mt_good_cells LINES DATA(lv_num_changed_rows).
+
+    IF lv_num_changed_rows > 0.
+      DATA:
+            dl_ins_row TYPE lvc_s_moce,
+            lt_aux_pasajeros TYPE TABLE OF zip_sflight.
+
+      LOOP AT er_data_changed->mt_good_cells ASSIGNING FIELD-SYMBOL(<row>).
+
+        CASE <row>-fieldname.
+
+          WHEN 'AGE'.
+            CALL METHOD validate_age
+              EXPORTING
+                is_mod_row      = <row>
+                ir_changed_data = er_data_changed.
+
+          WHEN 'DNI'.
+            CALL METHOD validate_dni
+              EXPORTING
+                is_mod_row      = <row>
+                ir_changed_data = er_data_changed.
+
+        ENDCASE.
+
+      ENDLOOP.
+
+      update_oper = 'X'.
+
+    ENDIF.
+
+  ENDMETHOD. "check_if_rows_changed
+
+  METHOD check_if_rows_deleted.
+
+    DESCRIBE TABLE er_data_changed->mt_deleted_rows LINES DATA(lv_num_deleted_rows).
+
+    IF lv_num_deleted_rows > 0.
+      DATA:
+            dl_ins_row TYPE lvc_s_moce.
+
+      LOOP AT er_data_changed->mt_deleted_rows ASSIGNING FIELD-SYMBOL(<row>).
+        READ TABLE lt_pasajeros ASSIGNING FIELD-SYMBOL(<ls_pasajeros>) INDEX <row>-row_id.
+        IF sy-subrc EQ 0.
+          APPEND <ls_pasajeros> TO lt_del_pasajeros.
+        ENDIF.
+      ENDLOOP.
+
+    ENDIF.
+
+  ENDMETHOD. "check_if_rows_deleted
+
+  METHOD display_grid.
+
+    edit_style(  ).
+
+    CALL METHOD g_grid->set_ready_for_input
+      EXPORTING
+        i_ready_for_input = 0.
+
+
+    CALL METHOD g_grid->set_table_for_first_display
+      EXPORTING
+        i_structure_name = 'ZIP_SFLIGHT'
+        is_layout        = gs_layout
+      CHANGING
+        it_outtab        = gt_outtab[].
+
+  ENDMETHOD. "display_grid
+
+  METHOD edit_style.
+
+    DATA:
+        ls_stylerow TYPE lvc_s_styl,
+        l_mode      TYPE raw4.
+
+    gs_layout-stylefname = 'CELLTAB'.
+    gs_layout-edit = 'X'.
+
+    LOOP AT gt_outtab ASSIGNING FIELD-SYMBOL(<gs_outtab>).
+
+      ls_stylerow-fieldname = 'DNI'.
+      ls_stylerow-style = cl_gui_alv_grid=>mc_style_disabled.
+
+      INSERT ls_stylerow INTO TABLE <gs_outtab>-celltab.
+
+      ls_stylerow-fieldname = 'AGE'.
+      ls_stylerow-style = cl_gui_alv_grid=>mc_style_enabled.
+
+      INSERT ls_stylerow INTO TABLE <gs_outtab>-celltab.
+
+      MODIFY gt_outtab FROM <gs_outtab>.
+
+    ENDLOOP.
+
+  ENDMETHOD. "edit_style
+
+  METHOD exit_program.
+    LEAVE PROGRAM.
+  ENDMETHOD. "exit_program
+
+
+  METHOD get_data.
+
+    DATA: gs_outtab LIKE LINE OF gt_outtab.
+
+    SELECT * FROM zip_sflight INTO TABLE lt_pasajeros.
+
+    LOOP AT lt_pasajeros ASSIGNING FIELD-SYMBOL(<ls_pasajeros>).
+      MOVE-CORRESPONDING <ls_pasajeros> TO gs_outtab.
+      APPEND gs_outtab TO gt_outtab.
+    ENDLOOP.
+
+  ENDMETHOD. "get_data
+
+  METHOD handle_chaged_data.
+
+    lv_error = space.
+
+    check_if_rows_deleted( er_data_changed ).
+    check_if_rows_changed( er_data_changed ).
+
+    IF lv_error EQ 'X'.
+      CALL METHOD er_data_changed->display_protocol.
+    ENDIF.
+
+  ENDMETHOD. "handle_chaged_data
+
+  METHOD save.
+
+    IF g_grid IS INITIAL.
+      CALL FUNCTION 'GET_GLOBALS_FROM_SLVC_FULLSCR'
+        IMPORTING
+          e_grid = g_grid.
+    ENDIF.
+
+    IF g_grid IS NOT INITIAL.
+
+      DATA:
+            v_edited TYPE char1.
+
+      CALL METHOD g_grid->check_changed_data
+        IMPORTING
+          e_valid = v_edited.
+
+
+      IF v_edited = 'X' AND update_oper = 'X'.
+
+        DATA:
+                lt_aux_pasajeros TYPE TABLE OF zip_sflight,
+                ls_aux_pasajeros LIKE LINE OF lt_aux_pasajeros.
+
+        LOOP AT gt_outtab ASSIGNING FIELD-SYMBOL(<gs_outtab>).
+          MOVE-CORRESPONDING <gs_outtab> TO ls_aux_pasajeros .
+          APPEND ls_aux_pasajeros TO lt_aux_pasajeros.
+        ENDLOOP.
+
+        MODIFY zip_sflight FROM TABLE lt_aux_pasajeros.
+
+        IF sy-subrc EQ 0.
+          save_oper = 'X'.
+          MESSAGE `DB successefull updated.` TYPE 'I'.
+        ELSE.
+          MESSAGE `DB not updated.` TYPE 'E' DISPLAY LIKE 'I'.
+        ENDIF.
+
+        update_oper = ''.
+
+      ENDIF.
+
+      IF lines( lt_del_pasajeros ) > 0.
+
+        DELETE zip_sflight FROM TABLE lt_del_pasajeros.
+
+        IF sy-subrc EQ 0.
+          IF save_oper IS INITIAL.
+            save_oper = 'X'.
+            MESSAGE `Selected rows were deleted.` TYPE 'I'.
+          ENDIF.
+        ELSE.
+          MESSAGE `An error occurred while tryig to delete the selected rows.` TYPE 'E' DISPLAY LIKE 'I'.
+        ENDIF.
+      ENDIF.
+
+      IF save_oper = 'X'.
+        save_oper = ''.
+        switch_edit_mode(  ).
+      ENDIF.
+    ENDIF.
+
+  ENDMETHOD. "save
+
+  METHOD switch_edit_mode.
+
+    IF g_grid->is_ready_for_input(  ) EQ 0.
+
+      CALL METHOD g_grid->set_ready_for_input
+        EXPORTING
+          i_ready_for_input = 1.
+
+    ELSE.
+      CALL METHOD g_grid->set_ready_for_input
+        EXPORTING
+          i_ready_for_input = 0.
+    ENDIF.
+
+  ENDMETHOD. "switch_edit_mode
+
+  METHOD validate_age.
+
+    DATA:
+            lv_age TYPE zip_age,
+            ls_outtab TYPE zip_sflight.
+
+    CALL METHOD ir_changed_data->get_cell_value
+      EXPORTING
+        i_row_id    = is_mod_row-row_id
+        i_fieldname = is_mod_row-fieldname
+      IMPORTING
+        e_value     = lv_age.
+
+    IF sy-subrc NE 0.
+
+      CALL METHOD ir_changed_data->add_protocol_entry
+        EXPORTING
+          i_msgid     = '0K'
+          i_msgno     = '000'
+          i_msgty     = 'E'
+          i_msgv1     = text-m01
+          i_fieldname = is_mod_row-fieldname
+          i_row_id    = is_mod_row-row_id.
+
+      lv_error = 'X'.
+      EXIT.
+    ENDIF.
+
+  ENDMETHOD. "validate_age
+
+  METHOD validate_dni.
+
+    DATA:
+                lv_dni TYPE zip_dni,
+                ls_outtab TYPE zip_sflight.
+
+    CALL METHOD ir_changed_data->get_cell_value
+      EXPORTING
+        i_row_id    = is_mod_row-row_id
+        i_fieldname = is_mod_row-fieldname
+      IMPORTING
+        e_value     = lv_dni.
+
+    READ TABLE lt_pasajeros ASSIGNING FIELD-SYMBOL(<ls_pasajeros>) WITH KEY dni = lv_dni.
+
+    IF sy-subrc EQ 0.
+      CALL METHOD ir_changed_data->add_protocol_entry
+        EXPORTING
+          i_msgid     = '0K'
+          i_msgno     = '000'
+          i_msgty     = 'E'
+          i_msgv1     = 'DNI already exists.'
+          i_fieldname = is_mod_row-fieldname
+          i_row_id    = is_mod_row-row_id.
+
+      lv_error = 'X'.
+      EXIT.
+    ENDIF.
+
+  ENDMETHOD. "validate_dni
+ENDCLASS. "LCL_REPORT IMPLEMENTATION
+
+
+MODULE pbo OUTPUT.
+  SET PF-STATUS 'MAIN100'.
+  SET TITLEBAR 'MAIN100'.
+
+  IF g_custom_container IS INITIAL.
+    CREATE OBJECT g_custom_container
+      EXPORTING
+        container_name = g_container.
+
+    CREATE OBJECT g_grid
+      EXPORTING
+        i_parent = g_custom_container.
+
+    DATA(lo_report) = NEW lcl_report(  ).
+    SET HANDLER lo_report->handle_chaged_data FOR g_grid.
+    " REGISTER ENTER EVENT WITCH TRIGGERS DATA CHANGED EVENT
+    g_grid->register_edit_event( cl_gui_alv_grid=>mc_evt_enter ).
+
+    lo_report->get_data(  ).
+    lo_report->display_grid(  ).
+
+  ENDIF.
+ENDMODULE.
+
+MODULE pai INPUT.
+  save_ok = ok_code.
+  CLEAR ok_code.
+
+  CASE save_ok.
+    WHEN 'EXIT'.
+      lcl_report=>exit_program(  ).
+    WHEN 'SAVE'.
+      lcl_report=>save(  ).
+    WHEN 'SWITCH'.
+      lcl_report=>switch_edit_mode(  ).
+  ENDCASE.
+ENDMODULE.
