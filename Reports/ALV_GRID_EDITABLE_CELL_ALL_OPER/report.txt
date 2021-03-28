@@ -22,19 +22,20 @@ DATA: celltab TYPE lvc_t_styl.
 DATA: END OF gt_outtab.
 
 CLASS lcl_report DEFINITION.
+
   PUBLIC SECTION.
     CLASS-METHODS:
-      check_if_rows_deleted
-        IMPORTING
-            er_data_changed TYPE REF TO cl_alv_changed_data_protocol,
       check_if_rows_changed
         IMPORTING
             er_data_changed TYPE REF TO cl_alv_changed_data_protocol,
-      exit_program,
-      switch_edit_mode,
+      check_if_rows_deleted
+        IMPORTING
+            er_data_changed TYPE REF TO cl_alv_changed_data_protocol,
       display_grid,
+      exit_program,
       fill_celltab,
-      save.
+      save,
+      switch_edit_mode.
 
     METHODS:
         get_data,
@@ -44,13 +45,13 @@ CLASS lcl_report DEFINITION.
 
   PRIVATE SECTION.
     CLASS-DATA:
-      lt_pasajeros TYPE TABLE OF zip_sflight,
-      lt_celltab   TYPE lvc_t_styl,
-      l_index      TYPE i,
-      ls_styletab  TYPE lvc_t_styl,
-      update_oper  TYPE c.
+      lt_del_pasajeros  TYPE TABLE OF zip_sflight,
+      lt_pasajeros      TYPE TABLE OF zip_sflight,
+      lt_styletab       TYPE lvc_t_styl,
+      update_oper       TYPE c,
+      save_oper         TYPE c.
 
-ENDCLASS.
+ENDCLASS. "LCL_REPORT DEFINITION
 
 CLASS lcl_report IMPLEMENTATION.
 
@@ -74,7 +75,7 @@ CLASS lcl_report IMPLEMENTATION.
 
     ENDIF.
 
-  ENDMETHOD.
+  ENDMETHOD. "check_if_rows_changed
 
   METHOD check_if_rows_deleted.
 
@@ -82,100 +83,18 @@ CLASS lcl_report IMPLEMENTATION.
 
     IF lv_num_deleted_rows > 0.
       DATA:
-            dl_ins_row TYPE lvc_s_moce,
-            lt_aux_pasajeros TYPE TABLE OF zip_sflight.
+            dl_ins_row TYPE lvc_s_moce.
 
       LOOP AT er_data_changed->mt_deleted_rows ASSIGNING FIELD-SYMBOL(<row>).
         READ TABLE lt_pasajeros ASSIGNING FIELD-SYMBOL(<ls_pasajeros>) INDEX <row>-row_id.
         IF sy-subrc EQ 0.
-          APPEND <ls_pasajeros> TO lt_aux_pasajeros.
+          APPEND <ls_pasajeros> TO lt_del_pasajeros.
         ENDIF.
       ENDLOOP.
 
-      IF lines( lt_aux_pasajeros ) > 0.
-
-        DELETE zip_sflight FROM TABLE lt_aux_pasajeros.
-
-        IF sy-subrc EQ 0.
-          switch_edit_mode(  ).
-          MESSAGE `Selected rows were deleted.` TYPE 'I'.
-        ELSE.
-          switch_edit_mode(  ).
-          MESSAGE `An error occurred while tryig to delete the selected rows.` TYPE 'E' DISPLAY LIKE 'I'.
-        ENDIF.
-      ENDIF.
     ENDIF.
 
-  ENDMETHOD.
-
-  METHOD handle_chaged_data.
-
-    check_if_rows_deleted( er_data_changed ).
-    check_if_rows_changed( er_data_changed ).
-
-  ENDMETHOD.
-
-  METHOD fill_celltab.
-
-    DATA:
-        ls_stylerow TYPE lvc_s_styl,
-        l_mode      TYPE raw4.
-
-    LOOP AT gt_outtab ASSIGNING FIELD-SYMBOL(<gs_outtab>).
-
-      REFRESH <gs_outtab>-celltab.
-
-      REFRESH ls_styletab.
-      ls_stylerow-fieldname = 'DNI'.
-      ls_stylerow-style = cl_gui_alv_grid=>mc_style_disabled.
-      APPEND ls_stylerow TO ls_styletab.
-
-      INSERT LINES OF ls_styletab INTO TABLE <gs_outtab>-celltab.
-      MODIFY gt_outtab FROM <gs_outtab>.
-
-      REFRESH ls_styletab.
-      ls_stylerow-fieldname = 'AGE'.
-      ls_stylerow-style = cl_gui_alv_grid=>mc_style_enabled.
-      APPEND ls_stylerow TO ls_styletab.
-
-      INSERT LINES OF ls_styletab INTO TABLE <gs_outtab>-celltab.
-      MODIFY gt_outtab FROM <gs_outtab>.
-
-    ENDLOOP.
-
-  ENDMETHOD.
-
-  METHOD get_data.
-    DATA: gs_outtab LIKE LINE OF gt_outtab.
-
-    SELECT * FROM zip_sflight INTO TABLE lt_pasajeros.
-
-    LOOP AT lt_pasajeros ASSIGNING FIELD-SYMBOL(<ls_pasajeros>).
-      MOVE-CORRESPONDING <ls_pasajeros> TO gs_outtab.
-      APPEND gs_outtab TO gt_outtab.
-    ENDLOOP.
-
-  ENDMETHOD.
-
-  METHOD exit_program.
-    LEAVE PROGRAM.
-  ENDMETHOD.
-
-  METHOD switch_edit_mode.
-
-    IF g_grid->is_ready_for_input(  ) EQ 0.
-
-      CALL METHOD g_grid->set_ready_for_input
-        EXPORTING
-          i_ready_for_input = 1.
-
-    ELSE.
-      CALL METHOD g_grid->set_ready_for_input
-        EXPORTING
-          i_ready_for_input = 0.
-    ENDIF.
-
-  ENDMETHOD.
+  ENDMETHOD. "check_if_rows_deleted
 
   METHOD display_grid.
 
@@ -195,7 +114,61 @@ CLASS lcl_report IMPLEMENTATION.
       CHANGING
         it_outtab        = gt_outtab[].
 
+  ENDMETHOD. "display_grid
+
+  METHOD exit_program.
+    LEAVE PROGRAM.
+  ENDMETHOD. "exit_program
+
+  METHOD fill_celltab.
+
+    DATA:
+        ls_stylerow TYPE lvc_s_styl,
+        l_mode      TYPE raw4.
+
+    LOOP AT gt_outtab ASSIGNING FIELD-SYMBOL(<gs_outtab>).
+
+      REFRESH <gs_outtab>-celltab.
+
+      REFRESH lt_styletab.
+      ls_stylerow-fieldname = 'DNI'.
+      ls_stylerow-style = cl_gui_alv_grid=>mc_style_disabled.
+      APPEND ls_stylerow TO lt_styletab.
+
+      INSERT LINES OF lt_styletab INTO TABLE <gs_outtab>-celltab.
+      MODIFY gt_outtab FROM <gs_outtab>.
+
+      REFRESH lt_styletab.
+      ls_stylerow-fieldname = 'AGE'.
+      ls_stylerow-style = cl_gui_alv_grid=>mc_style_enabled.
+      APPEND ls_stylerow TO lt_styletab.
+
+      INSERT LINES OF lt_styletab INTO TABLE <gs_outtab>-celltab.
+      MODIFY gt_outtab FROM <gs_outtab>.
+
+    ENDLOOP. "fill_celltab
+
   ENDMETHOD.
+
+  METHOD get_data.
+
+    DATA: gs_outtab LIKE LINE OF gt_outtab.
+
+    SELECT * FROM zip_sflight INTO TABLE lt_pasajeros.
+
+    LOOP AT lt_pasajeros ASSIGNING FIELD-SYMBOL(<ls_pasajeros>).
+      MOVE-CORRESPONDING <ls_pasajeros> TO gs_outtab.
+      APPEND gs_outtab TO gt_outtab.
+    ENDLOOP.
+
+  ENDMETHOD. "get_data
+
+  METHOD handle_chaged_data.
+
+    check_if_rows_deleted( er_data_changed ).
+    check_if_rows_changed( er_data_changed ).
+
+  ENDMETHOD. "handle_chaged_data
 
   METHOD save.
 
@@ -225,23 +198,57 @@ CLASS lcl_report IMPLEMENTATION.
           APPEND ls_aux_pasajeros TO lt_aux_pasajeros.
         ENDLOOP.
 
-        MODIFY zip_sflight FROM TABLE lt_aux_pasajeros .
+        MODIFY zip_sflight FROM TABLE lt_aux_pasajeros.
 
         IF sy-subrc EQ 0.
-          switch_edit_mode(  ).
+          save_oper = 'X'.
           MESSAGE `DB successefull updated.` TYPE 'I'.
         ELSE.
-          switch_edit_mode(  ).
           MESSAGE `DB not updated.` TYPE 'E' DISPLAY LIKE 'I'.
         ENDIF.
 
         update_oper = ''.
 
       ENDIF.
+
+      IF lines( lt_del_pasajeros ) > 0.
+
+        DELETE zip_sflight FROM TABLE lt_del_pasajeros.
+
+        IF sy-subrc EQ 0.
+          IF save_oper IS INITIAL.
+            MESSAGE `Selected rows were deleted.` TYPE 'I'.
+          ENDIF.
+        ELSE.
+          MESSAGE `An error occurred while tryig to delete the selected rows.` TYPE 'E' DISPLAY LIKE 'I'.
+        ENDIF.
+      ENDIF.
+
+      IF save_oper = 'X'.
+        save_oper = ''.
+        switch_edit_mode(  ).
+      ENDIF.
     ENDIF.
 
-  ENDMETHOD.
-ENDCLASS.
+  ENDMETHOD. "save
+
+  METHOD switch_edit_mode.
+
+    IF g_grid->is_ready_for_input(  ) EQ 0.
+
+      CALL METHOD g_grid->set_ready_for_input
+        EXPORTING
+          i_ready_for_input = 1.
+
+    ELSE.
+      CALL METHOD g_grid->set_ready_for_input
+        EXPORTING
+          i_ready_for_input = 0.
+    ENDIF.
+
+  ENDMETHOD. "switch_edit_mode
+
+ENDCLASS. "LCL_REPORT IMPLEMENTATION
 
 
 MODULE pbo OUTPUT.
