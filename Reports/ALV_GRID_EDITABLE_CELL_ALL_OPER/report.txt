@@ -217,6 +217,7 @@ CLASS lcl_report IMPLEMENTATION.
 
         IF sy-subrc EQ 0.
           IF save_oper IS INITIAL.
+            save_oper = 'X'.
             MESSAGE `Selected rows were deleted.` TYPE 'I'.
           ENDIF.
         ELSE.
