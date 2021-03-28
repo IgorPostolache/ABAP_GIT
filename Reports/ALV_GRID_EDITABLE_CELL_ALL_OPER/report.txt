@@ -26,14 +26,14 @@ CLASS lcl_report DEFINITION.
   PUBLIC SECTION.
     CLASS-METHODS:
       check_if_rows_changed
-        IMPORTING
-            er_data_changed TYPE REF TO cl_alv_changed_data_protocol,
+            IMPORTING
+                er_data_changed TYPE REF TO cl_alv_changed_data_protocol,
       check_if_rows_deleted
-        IMPORTING
-            er_data_changed TYPE REF TO cl_alv_changed_data_protocol,
+            IMPORTING
+                er_data_changed TYPE REF TO cl_alv_changed_data_protocol,
       display_grid,
+      edit_style,
       exit_program,
-      fill_celltab,
       save,
       switch_edit_mode.
 
@@ -47,7 +47,6 @@ CLASS lcl_report DEFINITION.
     CLASS-DATA:
       lt_del_pasajeros  TYPE TABLE OF zip_sflight,
       lt_pasajeros      TYPE TABLE OF zip_sflight,
-      lt_styletab       TYPE lvc_t_styl,
       update_oper       TYPE c,
       save_oper         TYPE c.
 
@@ -98,9 +97,7 @@ CLASS lcl_report IMPLEMENTATION.
 
   METHOD display_grid.
 
-    gs_layout-stylefname = 'CELLTAB'.
-    gs_layout-edit = 'X'.
-    fill_celltab(  ).
+    edit_style(  ).
 
     CALL METHOD g_grid->set_ready_for_input
       EXPORTING
@@ -116,39 +113,37 @@ CLASS lcl_report IMPLEMENTATION.
 
   ENDMETHOD. "display_grid
 
-  METHOD exit_program.
-    LEAVE PROGRAM.
-  ENDMETHOD. "exit_program
-
-  METHOD fill_celltab.
+  METHOD edit_style.
 
     DATA:
         ls_stylerow TYPE lvc_s_styl,
         l_mode      TYPE raw4.
 
+    gs_layout-stylefname = 'CELLTAB'.
+    gs_layout-edit = 'X'.
+
     LOOP AT gt_outtab ASSIGNING FIELD-SYMBOL(<gs_outtab>).
 
-      REFRESH <gs_outtab>-celltab.
-
-      REFRESH lt_styletab.
       ls_stylerow-fieldname = 'DNI'.
       ls_stylerow-style = cl_gui_alv_grid=>mc_style_disabled.
-      APPEND ls_stylerow TO lt_styletab.
 
-      INSERT LINES OF lt_styletab INTO TABLE <gs_outtab>-celltab.
-      MODIFY gt_outtab FROM <gs_outtab>.
+      INSERT ls_stylerow INTO TABLE <gs_outtab>-celltab.
 
-      REFRESH lt_styletab.
       ls_stylerow-fieldname = 'AGE'.
       ls_stylerow-style = cl_gui_alv_grid=>mc_style_enabled.
-      APPEND ls_stylerow TO lt_styletab.
 
-      INSERT LINES OF lt_styletab INTO TABLE <gs_outtab>-celltab.
+      INSERT ls_stylerow INTO TABLE <gs_outtab>-celltab.
+
       MODIFY gt_outtab FROM <gs_outtab>.
 
-    ENDLOOP. "fill_celltab
+    ENDLOOP.
 
-  ENDMETHOD.
+  ENDMETHOD. "edit_style
+
+  METHOD exit_program.
+    LEAVE PROGRAM.
+  ENDMETHOD. "exit_program
+
 
   METHOD get_data.
 
