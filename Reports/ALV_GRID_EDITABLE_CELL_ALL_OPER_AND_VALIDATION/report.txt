@@ -69,7 +69,8 @@ CLASS lcl_report IMPLEMENTATION.
     IF lv_num_changed_rows > 0.
       DATA:
             dl_ins_row TYPE lvc_s_moce,
-            lt_aux_pasajeros TYPE TABLE OF zip_sflight.
+            lt_aux_pasajeros TYPE TABLE OF zip_sflight,
+            ls_aux_pasajeros LIKE LINE OF lt_aux_pasajeros.
 
       LOOP AT er_data_changed->mt_good_cells ASSIGNING FIELD-SYMBOL(<row>).
 
@@ -81,17 +82,22 @@ CLASS lcl_report IMPLEMENTATION.
                 is_mod_row      = <row>
                 ir_changed_data = er_data_changed.
 
+            ls_aux_pasajeros-age = <row>-value.
           WHEN 'DNI'.
             CALL METHOD validate_dni
               EXPORTING
                 is_mod_row      = <row>
                 ir_changed_data = er_data_changed.
 
+            ls_aux_pasajeros-dni = <row>-value.
         ENDCASE.
 
-      ENDLOOP.
+        APPEND ls_aux_pasajeros TO lt_pasajeros.
+        IF sy-subrc EQ 0.
+          update_oper = 'X'.
+        ENDIF.
 
-      update_oper = 'X'.
+      ENDLOOP.
 
     ENDIF.
 
@@ -109,6 +115,7 @@ CLASS lcl_report IMPLEMENTATION.
         READ TABLE lt_pasajeros ASSIGNING FIELD-SYMBOL(<ls_pasajeros>) INDEX <row>-row_id.
         IF sy-subrc EQ 0.
           APPEND <ls_pasajeros> TO lt_del_pasajeros.
+          DELETE lt_pasajeros INDEX <row>-row_id.
         ENDIF.
       ENDLOOP.
 
@@ -236,15 +243,25 @@ CLASS lcl_report IMPLEMENTATION.
 
       IF lines( lt_del_pasajeros ) > 0.
 
-        DELETE zip_sflight FROM TABLE lt_del_pasajeros.
-
-        IF sy-subrc EQ 0.
-          IF save_oper IS INITIAL.
-            save_oper = 'X'.
-            MESSAGE `Selected rows were deleted.` TYPE 'I'.
+        "CHECK IF THE ENTRY WAS NOT FIRST DELETED THEN INSERTED AGAIN
+        LOOP AT lt_del_pasajeros ASSIGNING FIELD-SYMBOL(<ls_del_pasajeros>).
+          READ TABLE lt_pasajeros WITH KEY dni = <ls_del_pasajeros>-dni age = <ls_del_pasajeros>-age TRANSPORTING NO FIELDS.
+          IF sy-subrc EQ 0.
+            DATA(dont_delete) = 'X'.
+            EXIT.
           ENDIF.
-        ELSE.
-          MESSAGE `An error occurred while tryig to delete the selected rows.` TYPE 'E' DISPLAY LIKE 'I'.
+        ENDLOOP.
+
+        IF dont_delete IS INITIAL.
+          DELETE zip_sflight FROM TABLE lt_del_pasajeros.
+          IF sy-subrc EQ 0.
+            IF save_oper IS INITIAL.
+              save_oper = 'X'.
+              MESSAGE `Selected rows were deleted.` TYPE 'I'.
+            ENDIF.
+          ELSE.
+            MESSAGE `An error occurred while tryig to delete the selected rows.` TYPE 'E' DISPLAY LIKE 'I'.
+          ENDIF.
         ENDIF.
       ENDIF.
 
