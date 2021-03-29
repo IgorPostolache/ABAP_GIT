@@ -32,17 +32,17 @@ CLASS lcl_report DEFINITION.
             IMPORTING
                 er_data_changed TYPE REF TO cl_alv_changed_data_protocol,
       display_grid,
-      edit_style,
       exit_program,
       save,
+      set_style,
       switch_edit_mode,
       validate_age
         IMPORTING
-            is_mod_row TYPE lvc_s_modi
+            is_mod_row      TYPE lvc_s_modi
             ir_changed_data TYPE REF TO cl_alv_changed_data_protocol,
       validate_dni
         IMPORTING
-            is_mod_row TYPE lvc_s_modi
+            is_mod_row      TYPE lvc_s_modi
             ir_changed_data TYPE REF TO cl_alv_changed_data_protocol.
 
     METHODS:
@@ -56,8 +56,8 @@ CLASS lcl_report DEFINITION.
       lt_del_pasajeros  TYPE TABLE OF zip_sflight,
       lv_error          TYPE c,
       lt_pasajeros      TYPE TABLE OF zip_sflight,
-      update_oper       TYPE c,
-      save_oper         TYPE c.
+      save_oper         TYPE c,
+      update_oper       TYPE c.
 
 ENDCLASS. "LCL_REPORT DEFINITION
 
@@ -68,9 +68,7 @@ CLASS lcl_report IMPLEMENTATION.
 
     IF lv_num_changed_rows > 0.
       DATA:
-            dl_ins_row TYPE lvc_s_moce,
-            lt_aux_pasajeros TYPE TABLE OF zip_sflight,
-            ls_aux_pasajeros LIKE LINE OF lt_aux_pasajeros.
+            ls_aux_pasajeros LIKE LINE OF lt_pasajeros.
 
       LOOP AT er_data_changed->mt_good_cells ASSIGNING FIELD-SYMBOL(<row>).
 
@@ -108,8 +106,6 @@ CLASS lcl_report IMPLEMENTATION.
     DESCRIBE TABLE er_data_changed->mt_deleted_rows LINES DATA(lv_num_deleted_rows).
 
     IF lv_num_deleted_rows > 0.
-      DATA:
-            dl_ins_row TYPE lvc_s_moce.
 
       LOOP AT er_data_changed->mt_deleted_rows ASSIGNING FIELD-SYMBOL(<row>).
         READ TABLE lt_pasajeros ASSIGNING FIELD-SYMBOL(<ls_pasajeros>) INDEX <row>-row_id.
@@ -125,7 +121,7 @@ CLASS lcl_report IMPLEMENTATION.
 
   METHOD display_grid.
 
-    edit_style(  ).
+    set_style(  ).
 
     CALL METHOD g_grid->set_ready_for_input
       EXPORTING
@@ -140,33 +136,6 @@ CLASS lcl_report IMPLEMENTATION.
         it_outtab        = gt_outtab[].
 
   ENDMETHOD. "display_grid
-
-  METHOD edit_style.
-
-    DATA:
-        ls_stylerow TYPE lvc_s_styl,
-        l_mode      TYPE raw4.
-
-    gs_layout-stylefname = 'CELLTAB'.
-    gs_layout-edit = 'X'.
-
-    LOOP AT gt_outtab ASSIGNING FIELD-SYMBOL(<gs_outtab>).
-
-      ls_stylerow-fieldname = 'DNI'.
-      ls_stylerow-style = cl_gui_alv_grid=>mc_style_disabled.
-
-      INSERT ls_stylerow INTO TABLE <gs_outtab>-celltab.
-
-      ls_stylerow-fieldname = 'AGE'.
-      ls_stylerow-style = cl_gui_alv_grid=>mc_style_enabled.
-
-      INSERT ls_stylerow INTO TABLE <gs_outtab>-celltab.
-
-      MODIFY gt_outtab FROM <gs_outtab>.
-
-    ENDLOOP.
-
-  ENDMETHOD. "edit_style
 
   METHOD exit_program.
     LEAVE PROGRAM.
@@ -273,6 +242,32 @@ CLASS lcl_report IMPLEMENTATION.
 
   ENDMETHOD. "save
 
+  METHOD set_style.
+
+    DATA:
+        ls_stylerow TYPE lvc_s_styl.
+
+    gs_layout-stylefname = 'CELLTAB'.
+    gs_layout-edit = 'X'.
+
+    LOOP AT gt_outtab ASSIGNING FIELD-SYMBOL(<gs_outtab>).
+
+      ls_stylerow-fieldname = 'DNI'.
+      ls_stylerow-style = cl_gui_alv_grid=>mc_style_disabled.
+
+      INSERT ls_stylerow INTO TABLE <gs_outtab>-celltab.
+
+      ls_stylerow-fieldname = 'AGE'.
+      ls_stylerow-style = cl_gui_alv_grid=>mc_style_enabled.
+
+      INSERT ls_stylerow INTO TABLE <gs_outtab>-celltab.
+
+      MODIFY gt_outtab FROM <gs_outtab>.
+
+    ENDLOOP.
+
+  ENDMETHOD. "set_style
+
   METHOD switch_edit_mode.
 
     IF g_grid->is_ready_for_input(  ) EQ 0.
@@ -292,8 +287,7 @@ CLASS lcl_report IMPLEMENTATION.
   METHOD validate_age.
 
     DATA:
-            lv_age TYPE zip_age,
-            ls_outtab TYPE zip_sflight.
+            lv_age TYPE zip_age.
 
     CALL METHOD ir_changed_data->get_cell_value
       EXPORTING
@@ -322,8 +316,7 @@ CLASS lcl_report IMPLEMENTATION.
   METHOD validate_dni.
 
     DATA:
-                lv_dni TYPE zip_dni,
-                ls_outtab TYPE zip_sflight.
+                lv_dni TYPE zip_dni.
 
     CALL METHOD ir_changed_data->get_cell_value
       EXPORTING
