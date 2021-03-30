@@ -64,13 +64,13 @@ ENDCLASS. "LCL_REPORT DEFINITION
 CLASS lcl_report IMPLEMENTATION.
 
   METHOD check_if_rows_changed.
-    DESCRIBE TABLE er_data_changed->mt_good_cells LINES DATA(lv_num_changed_rows).
+    DESCRIBE TABLE er_data_changed->mt_mod_cells LINES DATA(lv_num_changed_rows).
 
     IF lv_num_changed_rows > 0.
       DATA:
             ls_aux_pasajeros LIKE LINE OF lt_pasajeros.
 
-      LOOP AT er_data_changed->mt_good_cells ASSIGNING FIELD-SYMBOL(<row>).
+      LOOP AT er_data_changed->mt_mod_cells ASSIGNING FIELD-SYMBOL(<row>).
 
         CASE <row>-fieldname.
 
@@ -90,9 +90,14 @@ CLASS lcl_report IMPLEMENTATION.
             ls_aux_pasajeros-dni = <row>-value.
         ENDCASE.
 
-        APPEND ls_aux_pasajeros TO lt_pasajeros.
-        IF sy-subrc EQ 0.
-          update_oper = 'X'.
+        IF ls_aux_pasajeros-dni IS NOT INITIAL AND ls_aux_pasajeros-age IS NOT INITIAL.
+          APPEND ls_aux_pasajeros TO lt_pasajeros.
+          IF sy-subrc EQ 0.
+            READ TABLE gt_outtab WITH KEY dni = ls_aux_pasajeros-dni TRANSPORTING NO FIELDS.
+            IF sy-subrc EQ 0.
+              update_oper = space.
+            ENDIF.
+          ENDIF.
         ENDIF.
 
       ENDLOOP.
@@ -214,14 +219,13 @@ CLASS lcl_report IMPLEMENTATION.
 
         "CHECK IF THE ENTRY WAS NOT FIRST DELETED THEN INSERTED AGAIN
         LOOP AT lt_del_pasajeros ASSIGNING FIELD-SYMBOL(<ls_del_pasajeros>).
-          READ TABLE lt_pasajeros WITH KEY dni = <ls_del_pasajeros>-dni age = <ls_del_pasajeros>-age TRANSPORTING NO FIELDS.
+          READ TABLE lt_pasajeros WITH KEY dni = <ls_del_pasajeros>-dni TRANSPORTING NO FIELDS.
           IF sy-subrc EQ 0.
-            DATA(dont_delete) = 'X'.
-            EXIT.
+            DELETE lt_del_pasajeros WHERE dni = <ls_del_pasajeros>-dni.
           ENDIF.
         ENDLOOP.
 
-        IF dont_delete IS INITIAL.
+        IF lt_del_pasajeros IS NOT INITIAL.
           DELETE zip_sflight FROM TABLE lt_del_pasajeros.
           IF sy-subrc EQ 0.
             IF save_oper IS INITIAL.
@@ -309,6 +313,8 @@ CLASS lcl_report IMPLEMENTATION.
 
       lv_error = 'X'.
       EXIT.
+    ELSE.
+      update_oper = 'X'.
     ENDIF.
 
   ENDMETHOD. "validate_age
@@ -339,6 +345,8 @@ CLASS lcl_report IMPLEMENTATION.
 
       lv_error = 'X'.
       EXIT.
+    ELSE.
+      update_oper = 'X'.
     ENDIF.
 
   ENDMETHOD. "validate_dni
