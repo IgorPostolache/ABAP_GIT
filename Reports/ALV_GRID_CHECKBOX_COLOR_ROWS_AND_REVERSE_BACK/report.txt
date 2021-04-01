@@ -1,0 +1,279 @@
+*&---------------------------------------------------------------------*
+*& Module Pool       ZIP_P_TEST_000
+*&
+*&---------------------------------------------------------------------*
+*&
+*&
+*&---------------------------------------------------------------------*
+
+PROGRAM zip_p_test_000.
+
+CLASS lcl_report DEFINITION DEFERRED.
+
+DATA: ok_code            LIKE sy-ucomm,
+      save_ok            LIKE sy-ucomm,
+
+      g_container        TYPE scrfname VALUE 'BCALV_GRID_DEMO_0100_CONT1',
+      g_custom_container TYPE REF TO cl_gui_custom_container,
+      g_grid             TYPE REF TO cl_gui_alv_grid,
+
+      gs_layout          TYPE lvc_s_layo,
+      gt_fieldcat        TYPE lvc_t_fcat,
+
+      gt_exclude         TYPE ui_functions,
+
+      lo_report          TYPE REF TO lcl_report.
+
+DATA: BEGIN OF gt_outtab OCCURS 0.
+DATA: checkbox TYPE c.
+        INCLUDE STRUCTURE zip_sflight.
+DATA: celltab TYPE lvc_t_styl.
+*DATA: cellcolor TYPE lvc_t_scol.
+DATA: cellcolor(4) TYPE c.
+DATA: END OF gt_outtab.
+
+
+SELECTION-SCREEN BEGIN OF SCREEN 200.
+PARAMETERS:
+    p_color TYPE zip_color OBLIGATORY.
+SELECTION-SCREEN END   OF SCREEN 200.
+
+
+CLASS lcl_report DEFINITION.
+  PUBLIC SECTION.
+    METHODS:
+    call_select_color,
+    change_color,
+    disable_functions,
+    display_grid,
+    get_data,
+    leave_program,
+    revert_color,
+    set_cells_for_edit,
+    set_fieldcat,
+    set_layout,
+    set_style.
+
+  PRIVATE SECTION.
+    DATA:
+            lt_sflight TYPE STANDARD TABLE OF zip_sflight.
+ENDCLASS.
+
+CLASS lcl_report IMPLEMENTATION.
+
+  METHOD call_select_color.
+    CALL SELECTION-SCREEN 200.
+  ENDMETHOD. "call_select_color
+
+  METHOD change_color.
+    DATA lv_is_edited TYPE c.
+
+    CALL METHOD g_grid->check_changed_data
+      IMPORTING
+        e_valid = lv_is_edited.
+
+    IF lv_is_edited = 'X'.
+
+      LOOP AT gt_outtab ASSIGNING FIELD-SYMBOL(<ls_outtab>).
+
+        IF <ls_outtab>-checkbox = 'X'.
+          CASE p_color.
+            WHEN 'BLUE'.
+              <ls_outtab>-cellcolor = 'C110'.
+            WHEN 'YELLOW'.
+              <ls_outtab>-cellcolor = 'C310'.
+            WHEN 'GREEN'.
+              <ls_outtab>-cellcolor = 'C510'.
+            WHEN 'RED'.
+              <ls_outtab>-cellcolor = 'C610'.
+            WHEN 'ORANGE'.
+              <ls_outtab>-cellcolor = '7610'.
+          ENDCASE.
+        ENDIF.
+
+      ENDLOOP.
+
+      g_grid->refresh_table_display(  ).
+
+    ENDIF.
+
+  ENDMETHOD. "change_color
+
+  METHOD disable_functions.
+    DATA ls_exclude TYPE ui_func.
+
+    ls_exclude = cl_gui_alv_grid=>mc_fc_loc_copy_row.
+    APPEND ls_exclude TO gt_exclude.
+    ls_exclude = cl_gui_alv_grid=>mc_fc_loc_delete_row.
+    APPEND ls_exclude TO gt_exclude.
+    ls_exclude = cl_gui_alv_grid=>mc_fc_loc_append_row.
+    APPEND ls_exclude TO gt_exclude.
+    ls_exclude = cl_gui_alv_grid=>mc_fc_loc_insert_row.
+    APPEND ls_exclude TO gt_exclude.
+    ls_exclude = cl_gui_alv_grid=>mc_fc_loc_move_row.
+    APPEND ls_exclude TO gt_exclude.
+    ls_exclude = cl_gui_alv_grid=>mc_fc_loc_copy.
+    APPEND ls_exclude TO gt_exclude.
+    ls_exclude = cl_gui_alv_grid=>mc_fc_loc_cut.
+    APPEND ls_exclude TO gt_exclude.
+    ls_exclude = cl_gui_alv_grid=>mc_fc_loc_paste.
+    APPEND ls_exclude TO gt_exclude.
+    ls_exclude = cl_gui_alv_grid=>mc_fc_loc_paste_new_row.
+    APPEND ls_exclude TO gt_exclude.
+    ls_exclude = cl_gui_alv_grid=>mc_fc_loc_undo.
+    APPEND ls_exclude TO gt_exclude.
+
+  ENDMETHOD. "disable_functions
+
+
+  METHOD display_grid.
+
+    CALL METHOD g_grid->set_table_for_first_display
+      EXPORTING
+        i_structure_name     = 'ZIP_SFLIGHT'
+        is_layout            = gs_layout
+        it_toolbar_excluding = gt_exclude
+      CHANGING
+        it_fieldcatalog      = gt_fieldcat
+        it_outtab            = gt_outtab[].
+
+  ENDMETHOD. "display_grid
+
+  METHOD get_data.
+
+    DATA ls_outtab LIKE LINE OF gt_outtab.
+
+    SELECT * FROM zip_sflight INTO TABLE lt_sflight UP TO 5 ROWS.
+
+    LOOP AT lt_sflight ASSIGNING FIELD-SYMBOL(<ls_sflight>).
+      MOVE-CORRESPONDING <ls_sflight> TO ls_outtab.
+      APPEND ls_outtab TO gt_outtab.
+    ENDLOOP.
+
+  ENDMETHOD. "get_data
+
+  METHOD leave_program.
+    LEAVE PROGRAM.
+  ENDMETHOD. "leave_program
+
+  METHOD revert_color.
+    DATA lv_is_edited TYPE c.
+
+    CALL METHOD g_grid->check_changed_data
+      IMPORTING
+        e_valid = lv_is_edited.
+
+    IF lv_is_edited = 'X'.
+
+      LOOP AT gt_outtab ASSIGNING FIELD-SYMBOL(<gs_outtab>).
+        IF <gs_outtab>-checkbox IS INITIAL AND <gs_outtab>-cellcolor IS NOT INITIAL.
+          <gs_outtab>-cellcolor = space.
+        ENDIF.
+      ENDLOOP.
+
+      g_grid->refresh_table_display(  ).
+    ENDIF.
+  ENDMETHOD. "revert_color
+
+  METHOD set_cells_for_edit.
+    DATA ls_style_row TYPE lvc_s_styl.
+
+    LOOP AT gt_outtab ASSIGNING FIELD-SYMBOL(<gs_outtab>).
+
+      ls_style_row-fieldname = 'DNI'.
+      ls_style_row-style = cl_gui_alv_grid=>mc_style_disabled.
+
+      INSERT ls_style_row INTO TABLE <gs_outtab>-celltab.
+
+      ls_style_row-fieldname = 'AGE'.
+      ls_style_row-style = cl_gui_alv_grid=>mc_style_disabled.
+
+      INSERT ls_style_row INTO TABLE <gs_outtab>-celltab.
+
+      MODIFY gt_outtab FROM <gs_outtab>.
+
+    ENDLOOP.
+
+  ENDMETHOD. "set_cells_for_edit
+
+  METHOD set_fieldcat.
+    DATA ls_fcat TYPE lvc_s_fcat.
+
+    CALL FUNCTION 'LVC_FIELDCATALOG_MERGE'
+      EXPORTING
+        i_structure_name = 'ZIP_SFLIGHT'
+      CHANGING
+        ct_fieldcat      = gt_fieldcat.
+
+    CLEAR ls_fcat.
+
+    ls_fcat-fieldname = 'CHECKBOX'.
+    ls_fcat-checkbox = 'X'.
+
+    ls_fcat-coltext = 'CHECKBOX'.
+    ls_fcat-tooltip = 'CHECKBOX'.
+    ls_fcat-seltext = 'CHECKBOX'.
+
+    ls_fcat-outputlen = 10.
+
+    APPEND ls_fcat TO gt_fieldcat.
+  ENDMETHOD.
+
+  METHOD set_layout.
+
+    gs_layout-stylefname = 'CELLTAB'.
+    gs_layout-info_fname = 'CELLCOLOR'.
+    gs_layout-edit = 'X'.
+
+    set_cells_for_edit(  ).
+
+  ENDMETHOD. "set_layout
+
+  METHOD set_style.
+
+    set_layout(  ).
+    set_fieldcat(  ).
+    disable_functions(  ).
+
+  ENDMETHOD. "set_style
+
+ENDCLASS.
+
+MODULE pbo OUTPUT.
+  SET PF-STATUS 'MAIN100'.
+  SET TITLEBAR 'MAIN100'.
+
+  IF g_custom_container IS INITIAL.
+    CREATE OBJECT g_custom_container
+      EXPORTING
+        container_name = g_container.
+
+    CREATE OBJECT g_grid
+      EXPORTING
+        i_parent = g_custom_container.
+
+    CREATE OBJECT lo_report.
+
+    lo_report->get_data(  ).
+    lo_report->set_style(  ).
+    lo_report->display_grid(  ).
+
+    lo_report->call_select_color(  ).
+
+  ENDIF.
+ENDMODULE.
+
+MODULE pai INPUT.
+  save_ok = ok_code.
+  CLEAR ok_code.
+
+  CASE save_ok.
+    WHEN 'EXIT'.
+      lo_report->leave_program(  ).
+    WHEN 'CHANGE_COL'.
+      lo_report->change_color(  ).
+    WHEN 'RETURN_COL'.
+      lo_report->revert_color(  ).
+  ENDCASE.
+
+ENDMODULE.
