@@ -22,12 +22,6 @@ DATA: ok_code            LIKE sy-ucomm,
 
       lo_report          TYPE REF TO lcl_report.
 
-SELECTION-SCREEN BEGIN OF SCREEN 200.
-PARAMETERS:
-    p_color TYPE zip_color OBLIGATORY.
-SELECTION-SCREEN END   OF SCREEN 200.
-
-
 CLASS lcl_report DEFINITION.
   PUBLIC SECTION.
     CLASS-METHODS:
