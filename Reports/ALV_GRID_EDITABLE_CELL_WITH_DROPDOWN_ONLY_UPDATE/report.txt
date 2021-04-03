@@ -1,0 +1,250 @@
+*&---------------------------------------------------------------------*
+*& Module Pool       ZIP_P_TEST_000
+*&
+*&---------------------------------------------------------------------*
+*&
+*&
+*&---------------------------------------------------------------------*
+PROGRAM zip_p_test_000.
+
+CLASS lcl_report DEFINITION DEFERRED.
+
+DATA: ok_code            LIKE sy-ucomm,
+      save_ok            LIKE sy-ucomm,
+
+      g_container        TYPE scrfname VALUE 'BCALV_GRID_DEMO_0100_CONT1',
+      g_custom_container TYPE REF TO cl_gui_custom_container,
+      g_grid             TYPE REF TO cl_gui_alv_grid,
+
+      gt_fieldcat        TYPE lvc_t_fcat,
+
+      gt_exclude         TYPE ui_functions,
+
+      lo_report          TYPE REF TO lcl_report.
+
+SELECTION-SCREEN BEGIN OF SCREEN 200.
+PARAMETERS:
+    p_color TYPE zip_color OBLIGATORY.
+SELECTION-SCREEN END   OF SCREEN 200.
+
+
+CLASS lcl_report DEFINITION.
+  PUBLIC SECTION.
+    CLASS-METHODS:
+      create_and_init_alv.
+    METHODS:
+    check_if_rows_changed
+        IMPORTING
+            er_data_changed TYPE REF TO cl_alv_changed_data_protocol,
+    disable_functions,
+    display_grid,
+    get_data,
+    handle_changed_data
+        FOR EVENT data_changed OF cl_gui_alv_grid
+            IMPORTING er_data_changed,
+    leave_program,
+    save,
+    set_dropdown,
+    set_fieldcat,
+    set_style,
+    switch_edit_mode.
+
+  PRIVATE SECTION.
+    DATA:
+            lt_sflight TYPE STANDARD TABLE OF zip_sflight,
+            update_oper TYPE c.
+ENDCLASS.
+
+CLASS lcl_report IMPLEMENTATION.
+
+  METHOD check_if_rows_changed.
+    DESCRIBE TABLE er_data_changed->mt_mod_cells LINES DATA(lv_num_changed_rows).
+
+    IF lv_num_changed_rows > 0.
+      update_oper = 'X'.
+    ENDIF.
+
+  ENDMETHOD. "check_if_rows_changed
+
+  METHOD create_and_init_alv.
+    CREATE OBJECT g_custom_container
+      EXPORTING
+        container_name = g_container.
+
+    CREATE OBJECT g_grid
+      EXPORTING
+        i_parent = g_custom_container.
+
+    CREATE OBJECT lo_report.
+
+    SET HANDLER lo_report->handle_changed_data FOR g_grid.
+
+    lo_report->get_data(  ).
+    lo_report->set_style(  ).
+    lo_report->display_grid(  ).
+
+  ENDMETHOD. "create_and_init_alv
+
+  METHOD disable_functions.
+    DATA ls_exclude TYPE ui_func.
+
+    ls_exclude = cl_gui_alv_grid=>mc_fc_loc_copy_row.
+    APPEND ls_exclude TO gt_exclude.
+    ls_exclude = cl_gui_alv_grid=>mc_fc_loc_delete_row.
+    APPEND ls_exclude TO gt_exclude.
+    ls_exclude = cl_gui_alv_grid=>mc_fc_loc_append_row.
+    APPEND ls_exclude TO gt_exclude.
+    ls_exclude = cl_gui_alv_grid=>mc_fc_loc_insert_row.
+    APPEND ls_exclude TO gt_exclude.
+    ls_exclude = cl_gui_alv_grid=>mc_fc_loc_move_row.
+    APPEND ls_exclude TO gt_exclude.
+    ls_exclude = cl_gui_alv_grid=>mc_fc_loc_copy.
+    APPEND ls_exclude TO gt_exclude.
+    ls_exclude = cl_gui_alv_grid=>mc_fc_loc_cut.
+    APPEND ls_exclude TO gt_exclude.
+    ls_exclude = cl_gui_alv_grid=>mc_fc_loc_paste.
+    APPEND ls_exclude TO gt_exclude.
+    ls_exclude = cl_gui_alv_grid=>mc_fc_loc_paste_new_row.
+    APPEND ls_exclude TO gt_exclude.
+    ls_exclude = cl_gui_alv_grid=>mc_fc_loc_undo.
+    APPEND ls_exclude TO gt_exclude.
+
+  ENDMETHOD. "disable_functions
+
+  METHOD display_grid.
+
+    CALL METHOD g_grid->set_table_for_first_display
+      EXPORTING
+        i_structure_name     = 'ZIP_SFLIGHT'
+        it_toolbar_excluding = gt_exclude
+      CHANGING
+        it_fieldcatalog      = gt_fieldcat
+        it_outtab            = lt_sflight[].
+
+  ENDMETHOD. "display_grid
+
+  METHOD get_data.
+
+    SELECT * FROM zip_sflight INTO TABLE lt_sflight UP TO 5 ROWS.
+
+  ENDMETHOD. "get_data
+
+  METHOD handle_changed_data.
+    check_if_rows_changed( er_data_changed ).
+  ENDMETHOD.
+
+  METHOD leave_program.
+    LEAVE PROGRAM.
+  ENDMETHOD. "leave_program
+
+  METHOD save.
+    IF g_grid IS INITIAL.
+      CALL FUNCTION 'GET_GLOBALS_FROM_SLVC_FULLSCR'
+        IMPORTING
+          e_grid = g_grid.
+    ENDIF.
+
+    IF g_grid IS NOT INITIAL.
+
+      DATA v_edited TYPE char1.
+
+      CALL METHOD g_grid->check_changed_data
+        IMPORTING
+          e_valid = v_edited.
+
+      IF v_edited = 'X' AND update_oper = 'X'.
+
+        MODIFY zip_sflight FROM TABLE lt_sflight.
+
+        IF sy-subrc EQ 0.
+          switch_edit_mode(  ).
+          update_oper = space.
+          MESSAGE `DB successefull updated.` TYPE 'I'.
+        ELSE.
+          switch_edit_mode(  ).
+          MESSAGE `DB not updated.` TYPE 'E' DISPLAY LIKE 'I'.
+        ENDIF.
+      ENDIF.
+    ENDIF.
+
+  ENDMETHOD. "save
+
+  METHOD set_dropdown.
+    DATA:
+            lt_dropdown TYPE lvc_t_drop,
+            ls_dropdown TYPE lvc_s_drop,
+
+            lt_dral TYPE lvc_t_dral,
+            ls_dral TYPE lvc_s_dral.
+
+    ls_dropdown-handle = '1'.
+    ls_dropdown-value = 'ECONOMY'.
+    APPEND ls_dropdown TO lt_dropdown.
+
+    ls_dropdown-handle = '1'.
+    ls_dropdown-value = 'BUSINESS'.
+    APPEND ls_dropdown TO lt_dropdown.
+
+    g_grid->set_drop_down_table( it_drop_down = lt_dropdown ).
+
+  ENDMETHOD. "set_dropdown
+
+  METHOD set_fieldcat.
+    DATA ls_fcat TYPE lvc_s_fcat.
+
+    CALL FUNCTION 'LVC_FIELDCATALOG_MERGE'
+      EXPORTING
+        i_structure_name = 'ZIP_SFLIGHT'
+      CHANGING
+        ct_fieldcat      = gt_fieldcat.
+
+    LOOP AT gt_fieldcat ASSIGNING FIELD-SYMBOL(<ls_fcat>).
+      IF <ls_fcat>-fieldname = 'CLASS'.
+        <ls_fcat>-edit = 'X'.
+        <ls_fcat>-drdn_hndl = '1'.
+        <ls_fcat>-outputlen = 7.
+      ENDIF.
+    ENDLOOP.
+
+  ENDMETHOD. "set_fieldcat
+
+  METHOD set_style.
+
+    set_fieldcat(  ).
+    set_dropdown(  ).
+    disable_functions(  ).
+
+  ENDMETHOD. "set_style
+
+  METHOD switch_edit_mode.
+    IF g_grid->is_ready_for_input( ) = 0.
+      g_grid->set_ready_for_input( i_ready_for_input = 1 ).
+    ELSE.
+      g_grid->set_ready_for_input( i_ready_for_input = 0 ).
+    ENDIF.
+  ENDMETHOD. "switch_edit_mode
+
+ENDCLASS.
+
+MODULE pbo OUTPUT.
+  SET PF-STATUS 'MAIN100'.
+  SET TITLEBAR 'MAIN100'.
+
+  IF g_custom_container IS INITIAL.
+    lcl_report=>create_and_init_alv(  ).
+  ENDIF.
+
+ENDMODULE.
+
+MODULE pai INPUT.
+  save_ok = ok_code.
+  CLEAR ok_code.
+
+  CASE save_ok.
+    WHEN 'EXIT'.
+      lo_report->leave_program(  ).
+    WHEN 'SAVE'.
+      lo_report->save(  ).
+  ENDCASE.
+
+ENDMODULE.
