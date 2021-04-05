@@ -1,0 +1,476 @@
+*&---------------------------------------------------------------------*
+*& Module Pool       ZIP_P_TEST_000
+*&
+*&---------------------------------------------------------------------*
+*&
+*&
+*&---------------------------------------------------------------------*
+PROGRAM zip_p_test_000.
+
+CLASS lcl_grid      DEFINITION DEFERRED.
+CLASS lcl_grid_f4   DEFINITION DEFERRED.
+
+DATA: ok_code            LIKE sy-ucomm,
+      save_ok            LIKE sy-ucomm,
+
+      g_container        TYPE scrfname VALUE 'BCALV_GRID_DEMO_0100_CONT1',
+      g_custom_container TYPE REF TO cl_gui_custom_container,
+      g_grid             TYPE REF TO cl_gui_alv_grid,
+
+      gt_fieldcat        TYPE lvc_t_fcat,
+
+      gt_exclude         TYPE ui_functions,
+
+      gt_outtab          TYPE STANDARD TABLE OF zip_sflight,
+
+      lo_grid            TYPE REF TO lcl_grid,
+      lo_grid_f4         TYPE REF TO lcl_grid_f4.
+
+CLASS lcl_grid_f4 DEFINITION.
+  PUBLIC SECTION.
+    METHODS:
+        on_f4 FOR EVENT onf4 OF cl_gui_alv_grid
+            IMPORTING e_fieldname
+                      es_row_no
+                      er_event_data
+                      et_bad_cells
+                      e_display,
+        reset,
+        show_f4.
+  PRIVATE SECTION.
+    TYPES:
+             BEGIN OF ty_f4,
+                value     TYPE zip_class,
+                descr(20) TYPE c,
+             END OF ty_f4,
+
+             BEGIN OF ty_f4_event_params,
+                c_fieldname   TYPE lvc_fname,
+                cs_row_no     TYPE lvc_s_roid,
+                cr_event_data TYPE REF TO cl_alv_event_data,
+                ct_bad_cells  TYPE lvc_t_modi,
+                c_display     TYPE char01,
+             END OF ty_f4_event_params.
+    DATA:
+            lr_f4_alv    TYPE REF TO cl_gui_alv_grid,
+            lr_f4_cont   TYPE REF TO cl_gui_custom_container,
+            lt_f4        TYPE TABLE OF ty_f4,
+            ls_f4_params TYPE ty_f4_event_params,
+
+            lt_fieldcat  TYPE lvc_t_fcat.
+    METHODS:
+        check_smoker_cell,
+        display_grid_f4,
+        get_data_f4,
+        init_f4,
+        on_dbl_click FOR EVENT double_click OF cl_gui_alv_grid
+            IMPORTING es_row_no,
+        set_fieldcat_f4.
+
+ENDCLASS.
+
+CLASS lcl_grid_f4 IMPLEMENTATION.
+
+  METHOD check_smoker_cell.
+
+    READ TABLE ls_f4_params-ct_bad_cells WITH KEY fieldname = 'SMOKER' row_id = ls_f4_params-cs_row_no-row_id TRANSPORTING NO FIELDS.
+
+    IF sy-subrc EQ 0.
+      MESSAGE 'Please provide a correct smoker value type.' TYPE 'E' DISPLAY LIKE 'I'.
+      LEAVE SCREEN.
+    ENDIF.
+
+  ENDMETHOD. "check_smoker_cell
+
+  METHOD display_grid_f4.
+    DATA: ls_layout TYPE lvc_s_layo.
+
+    CREATE OBJECT lr_f4_cont
+      EXPORTING
+        container_name = 'CC_ONF4'.
+
+    CREATE OBJECT lr_f4_alv
+      EXPORTING
+        i_parent = lr_f4_cont.
+
+    "NECESARY TO HIDE TOOLBAR SO THE TABLE WILL APPEAR LIKE A F4 HELP
+    ls_layout-no_toolbar = 'X'.
+
+    CALL METHOD lr_f4_alv->set_table_for_first_display
+      EXPORTING
+        is_layout       = ls_layout
+      CHANGING
+        it_fieldcatalog = lt_fieldcat
+        it_outtab       = lt_f4.
+
+  ENDMETHOD. "display_grid_f4
+
+  METHOD get_data_f4.
+    DATA: ls_f4 LIKE LINE OF lt_f4.
+
+    CLEAR lt_f4.
+
+    READ TABLE gt_outtab ASSIGNING FIELD-SYMBOL(<ls_outtab>) INDEX ls_f4_params-cs_row_no-row_id.
+
+    IF <ls_outtab>-smoker IS INITIAL.
+      ls_f4-value = 'B'.
+      ls_f4-descr = 'Business Class'.
+      APPEND ls_f4 TO lt_f4.
+
+      ls_f4-value = 'E'.
+      ls_f4-descr = 'Economy Class'.
+      APPEND ls_f4 TO lt_f4.
+
+    ELSE.
+      ls_f4-value = 'E'.
+      ls_f4-descr = 'Economy Class'.
+      APPEND ls_f4 TO lt_f4.
+    ENDIF.
+
+  ENDMETHOD. "get_data_f4
+
+  METHOD init_f4.
+    set_fieldcat_f4(  ).
+    display_grid_f4(  ).
+    SET HANDLER lo_grid_f4->on_dbl_click FOR lr_f4_alv.
+    CALL METHOD cl_gui_cfw=>flush.
+  ENDMETHOD. "init_f4
+
+  METHOD on_dbl_click.
+    DATA ls_modi TYPE lvc_s_modi.
+    FIELD-SYMBOLS <is_f4_params> TYPE lvc_t_modi.
+
+    IF ls_f4_params-c_display = 'X'.
+      LEAVE SCREEN.
+    ENDIF.
+
+    ASSIGN ls_f4_params-cr_event_data->m_data->* TO <is_f4_params>.
+
+    ls_modi-row_id = ls_f4_params-cs_row_no-row_id.
+    ls_modi-fieldname = ls_f4_params-c_fieldname.
+
+    READ TABLE lt_f4 ASSIGNING FIELD-SYMBOL(<ls_f4>) INDEX es_row_no-row_id.
+
+    ls_modi-value = <ls_f4>-value.
+    APPEND ls_modi TO <is_f4_params>.
+
+    LEAVE SCREEN.
+
+  ENDMETHOD. "on_dbl_click
+
+  METHOD on_f4.
+
+    ls_f4_params-c_fieldname = e_fieldname.
+    ls_f4_params-cs_row_no = es_row_no.
+    ls_f4_params-cr_event_data = er_event_data.
+    ls_f4_params-ct_bad_cells = et_bad_cells.
+    ls_f4_params-c_display = e_display.
+    BREAK-POINT.
+    CALL SCREEN 101.
+
+    er_event_data->m_event_handled = 'X'.
+
+  ENDMETHOD. "on_f4
+
+  METHOD reset.
+    FIELD-SYMBOLS <is_f4_params> TYPE lvc_t_modi.
+    ASSIGN ls_f4_params-cr_event_data->m_data->* TO <is_f4_params>.
+    CLEAR ls_f4_params.
+    BREAK-POINT.
+  ENDMETHOD. "reset
+
+  METHOD set_fieldcat_f4.
+    DATA ls_fcat TYPE lvc_s_fcat.
+
+    CLEAR ls_fcat.
+    ls_fcat-fieldname = 'VALUE'.
+    ls_fcat-coltext = 'VALUE'.
+    ls_fcat-inttype = 'S_CLASS'.
+    ls_fcat-outputlen = 10.
+    APPEND ls_fcat TO lt_fieldcat.
+
+    CLEAR ls_fcat.
+    ls_fcat-fieldname = 'DESCR'.
+    ls_fcat-coltext = 'DESCR'.
+    ls_fcat-inttype = 'C'.
+    ls_fcat-outputlen = 20.
+    APPEND ls_fcat TO lt_fieldcat.
+
+  ENDMETHOD. "set_fieldcat_for_f4
+
+  METHOD show_f4.
+    IF lr_f4_cont IS INITIAL.
+      init_f4(  ).
+    ENDIF.
+
+    check_smoker_cell(  ).
+    get_data_f4(  ).
+    lr_f4_alv->refresh_table_display(  ).
+    call method cl_gui_cfw=>flush.
+
+  ENDMETHOD. "show_f4
+
+ENDCLASS. "lcl_grid_f4
+
+
+CLASS lcl_grid DEFINITION.
+  PUBLIC SECTION.
+    CLASS-METHODS:
+      create_and_init_alv,
+      create_and_init_onf4.
+    METHODS:
+    check_if_rows_changed
+        IMPORTING
+            er_data_changed TYPE REF TO cl_alv_changed_data_protocol,
+    disable_functions,
+    display_grid,
+    get_data,
+    handle_changed_data
+        FOR EVENT data_changed OF cl_gui_alv_grid
+            IMPORTING er_data_changed,
+    leave_program,
+    save,
+    set_dropdown,
+    set_fieldcat,
+    set_style,
+    switch_edit_mode.
+
+  PRIVATE SECTION.
+    DATA:
+            update_oper TYPE c.
+ENDCLASS.
+
+CLASS lcl_grid IMPLEMENTATION.
+
+  METHOD check_if_rows_changed.
+    DESCRIBE TABLE er_data_changed->mt_mod_cells LINES DATA(lv_num_changed_rows).
+
+    IF lv_num_changed_rows > 0.
+      update_oper = 'X'.
+    ENDIF.
+
+  ENDMETHOD. "check_if_rows_changed
+
+  METHOD create_and_init_alv.
+    CREATE OBJECT g_custom_container
+      EXPORTING
+        container_name = g_container.
+
+    CREATE OBJECT g_grid
+      EXPORTING
+        i_parent = g_custom_container.
+
+    CREATE OBJECT lo_grid.
+
+    SET HANDLER lo_grid->handle_changed_data FOR g_grid.
+
+    lo_grid->get_data(  ).
+    lo_grid->set_style(  ).
+    lo_grid->display_grid(  ).
+
+  ENDMETHOD. "create_and_init_alv
+
+  METHOD create_and_init_onf4.
+
+    g_grid->register_f4_for_fields(
+            it_f4 = VALUE #( ( fieldname = 'CLASS' register = 'X' getbefore = 'X' chngeafter = space ) ) ).
+
+    CREATE OBJECT lo_grid_f4.
+    SET HANDLER lo_grid_f4->on_f4 FOR g_grid.
+
+  ENDMETHOD. "CREATE_AND_INIT_onf4
+
+  METHOD disable_functions.
+    DATA ls_exclude TYPE ui_func.
+
+    ls_exclude = cl_gui_alv_grid=>mc_fc_loc_copy_row.
+    APPEND ls_exclude TO gt_exclude.
+    ls_exclude = cl_gui_alv_grid=>mc_fc_loc_delete_row.
+    APPEND ls_exclude TO gt_exclude.
+    ls_exclude = cl_gui_alv_grid=>mc_fc_loc_append_row.
+    APPEND ls_exclude TO gt_exclude.
+    ls_exclude = cl_gui_alv_grid=>mc_fc_loc_insert_row.
+    APPEND ls_exclude TO gt_exclude.
+    ls_exclude = cl_gui_alv_grid=>mc_fc_loc_move_row.
+    APPEND ls_exclude TO gt_exclude.
+    ls_exclude = cl_gui_alv_grid=>mc_fc_loc_copy.
+    APPEND ls_exclude TO gt_exclude.
+    ls_exclude = cl_gui_alv_grid=>mc_fc_loc_cut.
+    APPEND ls_exclude TO gt_exclude.
+    ls_exclude = cl_gui_alv_grid=>mc_fc_loc_paste.
+    APPEND ls_exclude TO gt_exclude.
+    ls_exclude = cl_gui_alv_grid=>mc_fc_loc_paste_new_row.
+    APPEND ls_exclude TO gt_exclude.
+    ls_exclude = cl_gui_alv_grid=>mc_fc_loc_undo.
+    APPEND ls_exclude TO gt_exclude.
+
+  ENDMETHOD. "disable_functions
+
+  METHOD display_grid.
+
+    CALL METHOD g_grid->set_table_for_first_display
+      EXPORTING
+        i_structure_name     = 'ZIP_SFLIGHT'
+        it_toolbar_excluding = gt_exclude
+      CHANGING
+        it_fieldcatalog      = gt_fieldcat
+        it_outtab            = gt_outtab[].
+
+  ENDMETHOD. "display_grid
+
+  METHOD get_data.
+    DATA ls_outtab LIKE LINE OF gt_outtab.
+
+    SELECT * FROM zip_sflight INTO TABLE gt_outtab UP TO 5 ROWS.
+
+  ENDMETHOD. "get_data
+
+  METHOD handle_changed_data.
+    check_if_rows_changed( er_data_changed ).
+  ENDMETHOD.
+
+  METHOD leave_program.
+    LEAVE PROGRAM.
+  ENDMETHOD. "leave_program
+
+  METHOD save.
+    IF g_grid IS INITIAL.
+      CALL FUNCTION 'GET_GLOBALS_FROM_SLVC_FULLSCR'
+        IMPORTING
+          e_grid = g_grid.
+    ENDIF.
+
+    IF g_grid IS NOT INITIAL.
+
+      DATA v_edited TYPE char1.
+
+      CALL METHOD g_grid->check_changed_data
+        IMPORTING
+          e_valid = v_edited.
+
+      IF v_edited = 'X' AND update_oper = 'X'.
+
+        MODIFY zip_sflight FROM TABLE gt_outtab.
+
+        IF sy-subrc EQ 0.
+          switch_edit_mode(  ).
+          update_oper = space.
+          MESSAGE `DB successefull updated.` TYPE 'I'.
+        ELSE.
+          switch_edit_mode(  ).
+          MESSAGE `DB not updated.` TYPE 'E' DISPLAY LIKE 'I'.
+        ENDIF.
+      ENDIF.
+    ENDIF.
+
+  ENDMETHOD. "save
+
+  METHOD set_dropdown.
+    DATA:
+            lt_dropdown TYPE lvc_t_drop,
+            ls_dropdown TYPE lvc_s_drop,
+
+            lt_dral TYPE lvc_t_dral,
+            ls_dral TYPE lvc_s_dral.
+
+    ls_dropdown-handle = '1'.
+    ls_dropdown-value = 'ECONOMY'.
+    APPEND ls_dropdown TO lt_dropdown.
+
+    ls_dropdown-handle = '2'.
+    ls_dropdown-value = 'ECONOMY'.
+    APPEND ls_dropdown TO lt_dropdown.
+
+    ls_dropdown-handle = '2'.
+    ls_dropdown-value = 'BUSINESS'.
+    APPEND ls_dropdown TO lt_dropdown.
+
+    g_grid->set_drop_down_table( it_drop_down = lt_dropdown ).
+
+  ENDMETHOD. "set_dropdown
+
+  METHOD set_fieldcat.
+    DATA ls_fcat TYPE lvc_s_fcat.
+
+    CALL FUNCTION 'LVC_FIELDCATALOG_MERGE'
+      EXPORTING
+        i_structure_name = 'ZIP_SFLIGHT'
+      CHANGING
+        ct_fieldcat      = gt_fieldcat.
+
+    LOOP AT gt_fieldcat ASSIGNING FIELD-SYMBOL(<ls_fcat>).
+
+      IF <ls_fcat>-fieldname = 'SMOKER'.
+        <ls_fcat>-edit = 'X'.
+        <ls_fcat>-outputlen = 7. "Improves the readability of coulm name
+      ENDIF.
+
+      IF <ls_fcat>-fieldname = 'CLASS'.
+        <ls_fcat>-edit = 'X'.
+        <ls_fcat>-outputlen = 7.
+      ENDIF.
+
+    ENDLOOP.
+
+  ENDMETHOD. "set_fieldcat
+
+  METHOD set_style.
+
+    set_fieldcat(  ).
+    set_dropdown(  ).
+    disable_functions(  ).
+
+  ENDMETHOD. "set_style
+
+  METHOD switch_edit_mode.
+    IF g_grid->is_ready_for_input( ) = 0.
+      g_grid->set_ready_for_input( i_ready_for_input = 1 ).
+    ELSE.
+      g_grid->set_ready_for_input( i_ready_for_input = 0 ).
+    ENDIF.
+  ENDMETHOD. "switch_edit_mode
+
+ENDCLASS. "lcl_grid
+
+MODULE pbo OUTPUT.
+  SET PF-STATUS 'MAIN100'.
+  SET TITLEBAR 'MAIN100'.
+
+  IF g_custom_container IS INITIAL.
+    lcl_grid=>create_and_init_alv(  ).
+    lcl_grid=>create_and_init_onf4(  ).
+  ENDIF.
+
+ENDMODULE.
+
+MODULE pai INPUT.
+  save_ok = ok_code.
+  CLEAR ok_code.
+
+  CASE save_ok.
+    WHEN 'EXIT'.
+      lo_grid->leave_program(  ).
+    WHEN 'SAVE'.
+      lo_grid->save(  ).
+  ENDCASE.
+
+ENDMODULE.
+
+MODULE status_0101 OUTPUT.
+  SET PF-STATUS 'POPUP'.
+  SET TITLEBAR 'POPUP'.
+
+  lo_grid_f4->show_f4( ).
+
+ENDMODULE.
+
+MODULE user_command_0101 INPUT.
+  save_ok = ok_code.
+  CLEAR ok_code.
+
+  CASE save_ok.
+    WHEN 'CANCEL'.
+      lo_grid_f4->reset(  ).
+      LEAVE SCREEN.
+  ENDCASE.
+ENDMODULE.
