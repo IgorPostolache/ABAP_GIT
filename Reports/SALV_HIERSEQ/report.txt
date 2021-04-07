@@ -1,0 +1,478 @@
+REPORT zip_p_test_001.
+
+CLASS lcl_report DEFINITION DEFERRED.
+
+TYPE-POOLS: col, icon, symbol.
+
+TYPES: BEGIN OF ty_master.
+        INCLUDE    TYPE alv_chck.
+TYPES:  exception  TYPE char1,
+        checkbox   TYPE sap_bool,
+        icon       TYPE icon_d,
+        symbol     TYPE icon_d,
+        hotspot    TYPE icon_d,
+        t_color_m  TYPE lvc_t_scol,
+        t_celltype TYPE salv_t_int4_column,
+        expand     TYPE char01,
+       END OF ty_master.
+
+TYPES: BEGIN OF ty_slave.
+        INCLUDE    TYPE alv_t_t2.
+TYPES:  exception  TYPE char1,
+        checkbox   TYPE sap_bool,
+        icon       TYPE icon_d,
+        symbol     TYPE icon_d,
+        hotspot    TYPE icon_d,
+        t_color_s  TYPE lvc_t_scol,
+        t_celltype TYPE salv_t_int4_column,
+       END OF ty_slave.
+
+CONSTANTS: con_master TYPE lvc_fname VALUE 'ALV_CHCK',
+           con_slave  TYPE lvc_fname VALUE 'ALV_T_T2'.
+
+DATA: gr_report TYPE REF TO lcl_report.
+
+CLASS lcl_report DEFINITION.
+  PUBLIC SECTION.
+    METHODS:
+        init_and_display_hierseq,
+        get_data,
+        on_dbl_click FOR EVENT double_click OF cl_salv_events_hierseq
+            IMPORTING level row column,
+        on_sgl_click FOR EVENT link_click OF cl_salv_events_hierseq
+            IMPORTING level row column.
+  PRIVATE SECTION.
+    DATA:
+            lt_master TYPE STANDARD TABLE OF ty_master,
+            lt_slave  TYPE STANDARD TABLE OF ty_slave,
+
+            lt_binding TYPE salv_t_hierseq_binding,
+
+            lr_hierseq TYPE REF TO cl_salv_hierseq_table.
+
+    METHODS:
+        color_column
+            IMPORTING
+                iv_columname  TYPE lvc_fname
+                ir_columns    TYPE REF TO cl_salv_columns_hierseq,
+        create_binding,
+        display_hierseq,
+        hide_column
+            IMPORTING
+                iv_columname  TYPE lvc_fname
+                ir_columns    TYPE REF TO cl_salv_columns_hierseq,
+        set_columns,
+        set_events,
+        set_functional_settings,
+        set_functions.
+ENDCLASS.
+
+CLASS lcl_report IMPLEMENTATION.
+  METHOD color_column.
+    DATA: lr_column TYPE REF TO cl_salv_column_hierseq,
+          ls_color  TYPE lvc_s_colo.
+    TRY.
+        lr_column ?= ir_columns->get_column( iv_columname ).
+        ls_color-col = col_negative.
+        ls_color-int = 0.
+        ls_color-inv = 0.
+        lr_column->set_color( ls_color ).
+      CATCH cx_salv_not_found.
+    ENDTRY.
+
+    TRY.
+        ir_columns->set_color_column( 'T_COLOR_M' ).
+      CATCH cx_salv_data_error.                         "
+    ENDTRY.
+  ENDMETHOD. "color_column
+
+  METHOD create_binding.
+    DATA: ls_binding TYPE salv_s_hierseq_binding.
+
+    ls_binding-master = 'MANDT'.
+    ls_binding-slave  = 'MANDT'.
+    APPEND ls_binding TO lt_binding.
+
+    ls_binding-master = 'CARRID'.
+    ls_binding-slave  = 'CARRID'.
+    APPEND ls_binding TO lt_binding.
+
+    ls_binding-master = 'CONNID'.
+    ls_binding-slave  = 'CONNID'.
+    APPEND ls_binding TO lt_binding.
+  ENDMETHOD. "create_binding
+
+  METHOD display_hierseq.
+    TRY.
+        cl_salv_hierseq_table=>factory(
+          EXPORTING
+            t_binding_level1_level2  = lt_binding
+          IMPORTING
+            r_hierseq                = lr_hierseq
+          CHANGING
+            t_table_level1           = lt_master
+            t_table_level2           = lt_slave ).
+      CATCH cx_salv_data_error cx_salv_not_found.
+    ENDTRY.
+  ENDMETHOD. "display_hierseq
+
+  METHOD hide_column.
+    DATA: lr_column TYPE REF TO cl_salv_column.
+
+    TRY.
+        lr_column = ir_columns->get_column( iv_columname ).
+        lr_column->set_technical( if_salv_c_bool_sap=>true ).
+      CATCH cx_salv_not_found.
+    ENDTRY.
+
+  ENDMETHOD. "hide_column
+
+  METHOD init_and_display_hierseq.
+
+    create_binding(  ).
+    display_hierseq(  ).
+    set_functions(  ).
+    set_columns(  ).
+    set_events(  ).
+    lr_hierseq->display(  ).
+
+  ENDMETHOD. "init_and_display_hierseq
+
+  METHOD get_data.
+
+    DATA: lt_aux_slave    TYPE STANDARD TABLE OF ty_slave,
+
+          ls_color    TYPE lvc_s_scol,
+          lt_color    TYPE lvc_t_scol,
+
+          ls_celltype TYPE salv_s_int4_column,
+          lt_celltype TYPE salv_t_int4_column,
+
+          lv_erg      TYPE i.
+
+
+    SELECT * FROM (con_master) INTO CORRESPONDING FIELDS OF TABLE lt_master UP TO 5 ROWS.
+
+    LOOP AT lt_master ASSIGNING FIELD-SYMBOL(<ls_master>).
+
+      SELECT * FROM (con_slave)
+        INTO CORRESPONDING FIELDS OF TABLE lt_aux_slave
+            UP TO 5 ROWS
+                WHERE carrid = <ls_master>-carrid AND connid = <ls_master>-connid.
+
+      APPEND LINES OF lt_aux_slave TO lt_slave.
+
+      lv_erg = sy-tabix MOD 3.
+
+      <ls_master>-exception = lv_erg + 1.
+      <ls_master>-hotspot = icon_overview.
+
+      CASE lv_erg.
+        WHEN 0.
+          <ls_master>-checkbox = abap_false.
+          <ls_master>-icon     = icon_cancel.
+          <ls_master>-symbol   = sym_unlocked.
+
+          CLEAR lt_color.
+          CLEAR ls_color.
+
+          ls_color-color-col = col_negative.
+          ls_color-color-int = 0.
+          ls_color-color-inv = 0.
+          APPEND ls_color TO lt_color.
+
+          <ls_master>-t_color_m = lt_color.
+
+          CLEAR lt_celltype.
+          CLEAR ls_celltype.
+
+          ls_celltype-columnname = space.
+          ls_celltype-value      = if_salv_c_cell_type=>text.
+          APPEND ls_celltype TO lt_celltype.
+
+          <ls_master>-t_celltype = lt_celltype.
+
+        WHEN 1.
+          <ls_master>-checkbox = abap_true.
+          <ls_master>-icon     = icon_okay.
+          <ls_master>-symbol   = sym_locked.
+
+        WHEN 2.
+          <ls_master>-checkbox = abap_false.
+          <ls_master>-icon     = icon_cancel.
+          <ls_master>-symbol   = sym_unlocked.
+
+      ENDCASE.
+
+    ENDLOOP.
+
+    SORT lt_slave BY carrid connid.
+
+    LOOP AT lt_slave ASSIGNING FIELD-SYMBOL(<ls_slave>).
+      lv_erg = sy-tabix MOD 3.
+
+      <ls_slave>-exception = lv_erg + 1.
+      <ls_slave>-hotspot  = icon_overview.
+
+      CASE lv_erg.
+        WHEN 0.
+          <ls_slave>-checkbox = abap_false.
+          <ls_slave>-icon     = icon_cancel.
+          <ls_slave>-symbol   = sym_unlocked.
+
+          CLEAR lt_color.
+          CLEAR ls_color.
+
+          ls_color-color-col = col_positive.
+          ls_color-color-int = 0.
+          ls_color-color-inv = 0.
+          APPEND ls_color TO lt_color.
+
+          <ls_slave>-t_color_s = lt_color.
+
+          CLEAR lt_celltype.
+          CLEAR ls_celltype.
+
+          ls_celltype-columnname = space.
+          ls_celltype-value      = if_salv_c_cell_type=>hotspot.
+          APPEND ls_celltype TO lt_celltype.
+
+          <ls_slave>-t_celltype = lt_celltype.
+
+        WHEN 1.
+          <ls_slave>-checkbox = abap_true.
+          <ls_slave>-icon     = icon_okay.
+          <ls_slave>-symbol   = sym_locked.
+
+        WHEN 2.
+          <ls_slave>-checkbox = abap_false.
+          <ls_slave>-icon     = icon_cancel.
+          <ls_slave>-symbol   = sym_unlocked.
+      ENDCASE.
+
+    ENDLOOP.
+
+  ENDMETHOD. "get_data
+
+  METHOD on_dbl_click.
+    DATA msg TYPE string.
+
+    msg = | Row: { row } Column: { column } |.
+
+    MESSAGE msg TYPE 'I'.
+  ENDMETHOD. "on_dbl_click
+
+  METHOD on_sgl_click.
+    DATA msg TYPE string.
+
+    msg = | Row: { row } Column: { column } |.
+
+    MESSAGE msg TYPE 'I'.
+
+  ENDMETHOD. "on_sgl_click
+
+  METHOD set_columns.
+    DATA: lr_column  TYPE REF TO cl_salv_column_hierseq,
+          lr_columns TYPE REF TO cl_salv_columns_hierseq,
+
+          lr_level   TYPE REF TO cl_salv_hierseq_level.
+
+    TRY.
+        lr_columns = lr_hierseq->get_columns( 1 ).
+      CATCH cx_salv_not_found.
+    ENDTRY.
+
+    lr_columns->set_optimize( abap_true ).
+
+    hide_column( iv_columname = 'MANDT' ir_columns = lr_columns ).
+
+    TRY.
+        lr_columns->set_expand_column( 'EXPAND' ).
+      CATCH cx_salv_data_error.
+    ENDTRY.
+
+    TRY.
+        lr_level = lr_hierseq->get_level( 1 ).
+      CATCH cx_salv_not_found.
+    ENDTRY.
+
+    lr_level->set_items_expanded( ).
+
+    TRY.
+        lr_columns->set_exception_column( 'EXCEPTION' ).
+      CATCH cx_salv_data_error.
+    ENDTRY.
+
+    TRY.
+        lr_column ?= lr_columns->get_column( 'ICON' ).
+        lr_column->set_icon( if_salv_c_bool_sap=>true ).
+        lr_column->set_long_text( 'ICON' ).
+      CATCH cx_salv_not_found.
+    ENDTRY.
+
+    TRY.
+        lr_column ?= lr_columns->get_column( 'SYMBOL' ).
+        lr_column->set_symbol( if_salv_c_bool_sap=>true ).
+        lr_column->set_long_text( 'SYMBOL' ).
+      CATCH cx_salv_not_found.
+    ENDTRY.
+
+    TRY.
+        lr_column ?= lr_columns->get_column( 'CHECKBOX' ).
+        lr_column->set_cell_type( if_salv_c_cell_type=>checkbox ).
+        lr_column->set_long_text( 'CHECKBOX' ).
+      CATCH cx_salv_not_found.
+    ENDTRY.
+
+    TRY.
+        lr_column ?= lr_columns->get_column( 'HOTSPOT' ).
+        lr_column->set_cell_type( if_salv_c_cell_type=>hotspot ).
+        lr_column->set_icon( if_salv_c_bool_sap=>true ).
+        lr_column->set_long_text( 'HOTSPOT' ).
+      CATCH cx_salv_not_found.
+    ENDTRY.
+
+    TRY.
+        lr_columns->set_cell_type_column( 'T_CELLTYPE' ).
+      CATCH cx_salv_data_error.
+    ENDTRY.
+
+    color_column( iv_columname = 'MANDT' ir_columns = lr_columns ).
+
+    TRY.
+        lr_columns = lr_hierseq->get_columns( 2 ).
+      CATCH cx_salv_not_found.
+    ENDTRY.
+
+    lr_columns->set_optimize( abap_true ).
+
+    hide_column( iv_columname = 'MANDT' ir_columns = lr_columns ).
+    hide_column( iv_columname = 'FLOAT_FI' ir_columns = lr_columns ).
+    hide_column( iv_columname = 'STRING_F' ir_columns = lr_columns ).
+    hide_column( iv_columname = 'XSTRING' ir_columns = lr_columns ).
+    hide_column( iv_columname = 'INT_FIEL' ir_columns = lr_columns ).
+    hide_column( iv_columname = 'HEX_FIEL' ir_columns = lr_columns ).
+    hide_column( iv_columname = 'DROPDOWN' ir_columns = lr_columns ).
+    hide_column( iv_columname = 'TAB_INDEX' ir_columns = lr_columns ).
+
+    color_column( iv_columname = 'CURRENCY' ir_columns = lr_columns ).
+
+  ENDMETHOD. "set_columns
+
+  METHOD set_events.
+    DATA lr_events TYPE REF TO cl_salv_events_hierseq.
+
+    lr_events = lr_hierseq->get_event(  ).
+
+    SET HANDLER gr_report->on_dbl_click FOR lr_events.
+    SET HANDLER gr_report->on_sgl_click FOR lr_events.
+
+  ENDMETHOD. "set_events
+
+  METHOD set_functional_settings.
+    DATA: lr_functional_settings TYPE REF TO cl_salv_functional_settings,
+          lr_tooltips             TYPE REF TO cl_salv_tooltips,
+          lv_value               TYPE lvc_value.
+
+    lr_functional_settings = lr_hierseq->get_functional_settings(  ).
+
+    lr_tooltips = lr_functional_settings->get_tooltips(  ).
+
+    TRY.
+        lr_tooltips->add_tooltip(
+          type       = cl_salv_tooltip=>c_type_exception
+          value      = '1'
+          tooltip    = 'My Red Light Tooltip' ).
+      CATCH cx_salv_existing.
+    ENDTRY.
+
+    TRY.
+        lr_tooltips->add_tooltip(
+          type       = cl_salv_tooltip=>c_type_exception
+          value      = '2'
+          tooltip    = 'My Yellow Light Tooltip' ).
+      CATCH cx_salv_existing.
+    ENDTRY.
+
+    TRY.
+        lr_tooltips->add_tooltip(
+          type       = cl_salv_tooltip=>c_type_exception
+          value      = '3'
+          tooltip    = 'My Green Light Tooltip' ).
+      CATCH cx_salv_existing.
+    ENDTRY.
+
+    TRY.
+        lv_value = icon_overview.
+        lr_tooltips->add_tooltip(
+          type    = cl_salv_tooltip=>c_type_icon
+          value   = lv_value
+          tooltip = 'Details' ).
+      CATCH cx_salv_existing.
+    ENDTRY.
+
+    TRY.
+        lv_value = icon_cancel.
+        lr_tooltips->add_tooltip(
+          type    = cl_salv_tooltip=>c_type_icon
+          value   = lv_value
+          tooltip = 'Failure' ).
+      CATCH cx_salv_existing.
+    ENDTRY.
+
+    TRY.
+        lv_value = icon_okay.
+        lr_tooltips->add_tooltip(
+          type    = cl_salv_tooltip=>c_type_icon
+          value   = lv_value
+          tooltip = 'No Problem' ).
+      CATCH cx_salv_existing.
+    ENDTRY.
+
+    TRY.
+        lv_value = icon_refresh.
+        lr_tooltips->add_tooltip(
+          type    = cl_salv_tooltip=>c_type_icon
+          value   = lv_value
+          tooltip = 'My Refresh Button' ).
+      CATCH cx_salv_existing.
+    ENDTRY.
+
+    TRY.
+        lv_value = sym_locked.
+        lr_tooltips->add_tooltip(
+          type    = cl_salv_tooltip=>c_type_symbol
+          value   = lv_value
+          tooltip = 'Locked' ).
+      CATCH cx_salv_existing.
+    ENDTRY.
+
+    TRY.
+        lv_value = sym_unlocked.
+        lr_tooltips->add_tooltip(
+          type    = cl_salv_tooltip=>c_type_symbol
+          value   = lv_value
+          tooltip = 'Unlocked' ).
+      CATCH cx_salv_existing.
+    ENDTRY.
+
+  ENDMETHOD. "set_functional_settings
+
+  METHOD set_functions.
+    DATA lr_functions TYPE REF TO cl_salv_functions.
+
+    lr_functions = lr_hierseq->get_functions(  ).
+    lr_functions->set_all( abap_true ).
+
+    set_functional_settings(  ).
+
+  ENDMETHOD. "set_functions
+
+ENDCLASS.
+
+START-OF-SELECTION.
+  CREATE OBJECT gr_report.
+  CALL METHOD gr_report->get_data.
+
+END-OF-SELECTION.
+  CALL METHOD gr_report->init_and_display_hierseq.
