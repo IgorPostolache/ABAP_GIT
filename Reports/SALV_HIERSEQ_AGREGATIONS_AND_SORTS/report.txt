@@ -1,0 +1,611 @@
+REPORT zip_p_test_001.
+
+CLASS lcl_report DEFINITION DEFERRED.
+
+TYPES: BEGIN OF ty_master.
+        INCLUDE    TYPE alv_chck.
+TYPES:  expand     TYPE char01,
+       END OF ty_master.
+
+CONSTANTS: BEGIN OF gc_s_alv_event,
+            print_eq_online TYPE i VALUE 1,
+            print_ne_online TYPE i VALUE 2,
+            print_no_online TYPE i VALUE 3,
+            online_no_print TYPE i VALUE 4,
+           END OF gc_s_alv_event,
+
+           con_master TYPE lvc_fname VALUE 'ALV_CHCK',
+           con_slave  TYPE lvc_fname VALUE 'ALV_T_T2'.
+
+DATA: gr_report TYPE REF TO lcl_report.
+
+CLASS lcl_report DEFINITION.
+  PUBLIC SECTION.
+    METHODS:
+        init_and_display_hierseq,
+        get_data,
+        on_end_of_page FOR EVENT end_of_page OF cl_salv_events_hierseq
+            IMPORTING r_end_of_page page,
+        on_top_of_page FOR EVENT top_of_page OF cl_salv_events_hierseq
+            IMPORTING r_top_of_page page table_index.
+
+  PRIVATE SECTION.
+    DATA:
+            lt_master TYPE STANDARD TABLE OF ty_master,
+            lt_slave  TYPE STANDARD TABLE OF alv_t_t2,
+
+            lt_binding TYPE salv_t_hierseq_binding,
+
+            lr_hierseq TYPE REF TO cl_salv_hierseq_table.
+
+    METHODS:
+        color_column
+            IMPORTING
+                iv_columname  TYPE lvc_fname
+                ir_columns    TYPE REF TO cl_salv_columns_hierseq,
+        create_binding,
+        create_bottom,
+        create_header,
+        display_hierseq,
+        hide_column
+            IMPORTING
+                iv_columname  TYPE lvc_fname
+                ir_columns    TYPE REF TO cl_salv_columns_hierseq,
+        set_aggregations,
+        set_columns,
+        set_events,
+        set_functional_settings,
+        set_functions,
+        set_sorts.
+ENDCLASS.
+
+CLASS lcl_report IMPLEMENTATION.
+
+  METHOD color_column.
+    DATA: lr_column TYPE REF TO cl_salv_column_hierseq,
+          ls_color  TYPE lvc_s_colo.
+    TRY.
+        lr_column ?= ir_columns->get_column( iv_columname ).
+        ls_color-col = col_negative.
+        ls_color-int = 0.
+        ls_color-inv = 0.
+        lr_column->set_color( ls_color ).
+      CATCH cx_salv_not_found.
+    ENDTRY.
+
+    TRY.
+        ir_columns->set_color_column( 'T_COLOR_M' ).
+      CATCH cx_salv_data_error.                         "
+    ENDTRY.
+  ENDMETHOD. "color_column
+
+  METHOD create_binding.
+    DATA: ls_binding TYPE salv_s_hierseq_binding.
+
+    ls_binding-master = 'MANDT'.
+    ls_binding-slave  = 'MANDT'.
+    APPEND ls_binding TO lt_binding.
+
+    ls_binding-master = 'CARRID'.
+    ls_binding-slave  = 'CARRID'.
+    APPEND ls_binding TO lt_binding.
+
+    ls_binding-master = 'CONNID'.
+    ls_binding-slave  = 'CONNID'.
+    APPEND ls_binding TO lt_binding.
+  ENDMETHOD. "create_binding
+
+  METHOD create_bottom.
+    DATA: lr_content TYPE REF TO cl_salv_form_element,
+          lr_header  TYPE REF TO cl_salv_form_header_info,
+          lv_text    TYPE string.
+
+
+    CONCATENATE 'END_OF_LIST' 'Flight Oerview' INTO lv_text SEPARATED BY space.
+
+    CREATE OBJECT lr_header
+      EXPORTING
+        text    = lv_text
+        tooltip = lv_text.
+
+    lr_content = lr_header.
+
+    lr_hierseq->set_end_of_list( lr_content ).
+
+  ENDMETHOD. "create_bottom
+
+  METHOD create_header.
+    DATA: lr_content TYPE REF TO cl_salv_form_element,
+          lr_header  TYPE REF TO cl_salv_form_header_info,
+          lv_text    TYPE string.
+
+    CONCATENATE 'TOP_OF_LIST' 'Flight Overview' INTO lv_text SEPARATED BY space.
+
+    CREATE OBJECT lr_header
+      EXPORTING
+        text    = lv_text
+        tooltip = lv_text.
+
+    lr_content = lr_header.
+
+    lr_hierseq->set_top_of_list( lr_content ).
+
+  ENDMETHOD. "create_header
+
+  METHOD display_hierseq.
+    TRY.
+        cl_salv_hierseq_table=>factory(
+          EXPORTING
+            t_binding_level1_level2  = lt_binding
+          IMPORTING
+            r_hierseq                = lr_hierseq
+          CHANGING
+            t_table_level1           = lt_master
+            t_table_level2           = lt_slave ).
+      CATCH cx_salv_data_error cx_salv_not_found.
+    ENDTRY.
+
+*    lr_hierseq->set_screen_status( pfstatus   =  'MAIN100'
+*                                   report     =  sy-repid ).
+
+  ENDMETHOD. "display_hierseq
+
+  METHOD hide_column.
+    DATA: lr_column TYPE REF TO cl_salv_column.
+
+    TRY.
+        lr_column = ir_columns->get_column( iv_columname ).
+        lr_column->set_technical( if_salv_c_bool_sap=>true ).
+      CATCH cx_salv_not_found.
+    ENDTRY.
+
+  ENDMETHOD. "hide_column
+
+  METHOD init_and_display_hierseq.
+    create_binding(  ).
+    display_hierseq(  ).
+    set_functions(  ).
+    create_header(  ).
+    create_bottom(  ).
+    set_columns(  ).
+    set_events(  ).
+    lr_hierseq->display(  ).
+
+  ENDMETHOD. "init_and_display_hierseq
+
+  METHOD get_data.
+    DATA lt_aux_slave TYPE STANDARD TABLE OF alv_t_t2.
+
+    SELECT * FROM (con_master) INTO CORRESPONDING FIELDS OF TABLE lt_master UP TO 5 ROWS.
+
+    LOOP AT lt_master ASSIGNING FIELD-SYMBOL(<ls_master>).
+
+      SELECT * FROM (con_slave)
+        INTO TABLE lt_aux_slave
+            UP TO 5 ROWS
+                WHERE carrid = <ls_master>-carrid AND connid = <ls_master>-connid.
+
+      APPEND LINES OF lt_aux_slave TO lt_slave.
+
+    ENDLOOP.
+
+  ENDMETHOD. "get_data
+
+  METHOD on_end_of_page.
+    DATA: lr_content TYPE REF TO cl_salv_form_element,
+          lr_header  TYPE REF TO cl_salv_form_header_info,
+          lv_text    TYPE string.
+
+    CONCATENATE 'END_OF_PAGE' 'FLIGHTS' INTO lv_text SEPARATED BY space.
+
+    CREATE OBJECT lr_header
+      EXPORTING
+        text    = lv_text
+        tooltip = lv_text.
+
+    r_end_of_page->set_content( lr_content ).
+
+  ENDMETHOD. "on_end_of_page
+
+  METHOD on_top_of_page.
+    DATA: lr_content TYPE REF TO cl_salv_form_element,
+          lr_data    TYPE REF TO data,
+          lv_index   TYPE i,
+
+          lr_sorts   TYPE REF TO cl_salv_sorts,
+          lt_sort    TYPE salv_t_sort_ref,
+          ls_sort    TYPE salv_s_sort_ref,
+
+          ls_alv     TYPE alv_tab,
+          lv_end     TYPE i,
+          lv_rest    TYPE i,
+          lv_row     TYPE i,
+
+          lr_column  TYPE REF TO cl_salv_column,
+          lr_columns TYPE REF TO cl_salv_columns,
+
+          lr_grid    TYPE REF TO cl_salv_form_layout_grid,
+          lr_grid_1  TYPE REF TO cl_salv_form_layout_grid,
+          lr_grid_2  TYPE REF TO cl_salv_form_layout_grid,
+          lr_label   TYPE REF TO cl_salv_form_label,
+          lr_text    TYPE REF TO cl_salv_form_text,
+          lv_text    TYPE string.
+
+    FIELD-SYMBOLS: <lv_value> TYPE any,
+                   <lt_itab>  TYPE table,
+                   <ls_itab>  TYPE any.
+
+    TRY.
+        lr_sorts   = lr_hierseq->get_sorts( 1 ).
+      CATCH cx_salv_not_found.
+    ENDTRY.
+
+    TRY.
+        lr_columns = lr_hierseq->get_columns( 1 ).
+      CATCH cx_salv_not_found.
+    ENDTRY.
+
+    ASSIGN lt_master TO <lt_itab>.
+    CREATE DATA lr_data LIKE LINE OF <lt_itab>.
+    ASSIGN lr_data->* TO <ls_itab>.
+
+    lt_sort = lr_sorts->get( ).
+
+    LOOP AT lt_sort INTO ls_sort.
+      IF ls_sort-r_sort->get_group(  ) EQ if_salv_c_sort=>group_with_newpage.
+        lv_end = sy-tabix.
+      ENDIF.
+    ENDLOOP.
+
+    lv_index = table_index.
+
+    IF lv_index IS INITIAL.
+      ADD 1 TO lv_index.
+    ENDIF.
+
+    READ TABLE <lt_itab> ASSIGNING <ls_itab> INDEX lv_index.
+
+    CREATE OBJECT lr_grid.
+
+    IF lv_end IS NOT INITIAL.
+      lr_grid_1 = lr_grid->create_grid( row    = 1
+                                        column = 1 ).
+
+      lr_grid_2 = lr_grid->create_grid( row    = 1
+                                        column = 2 ).
+
+      LOOP AT lt_sort INTO ls_sort.
+        IF sy-tabix GT lv_end.
+          EXIT.
+        ENDIF.
+
+        lv_rest = sy-tabix MOD 2.
+
+        IF lv_rest IS NOT INITIAL.
+          ADD 1 TO lv_row.
+        ENDIF.
+
+        TRY.
+            lr_column = lr_columns->get_column( ls_sort-columnname ).
+          CATCH cx_salv_not_found.
+        ENDTRY.
+
+        ASSIGN COMPONENT ls_sort-columnname OF STRUCTURE <ls_itab> TO <lv_value>.
+
+        IF ls_sort-columnname EQ 'CARRID'.
+          SELECT SINGLE *
+              FROM alv_tab
+                  INTO CORRESPONDING FIELDS OF ls_alv
+                      WHERE carrid = <lv_value>.
+        ENDIF.
+
+        CASE ls_sort-columnname.
+          WHEN 'CARRID'.
+            lv_text  = lr_column->get_medium_text(  ).
+            lr_label = lr_grid_1->create_label( row     = lv_row
+                                                column  = 1
+                                                text    = lv_text
+                                                tooltip = lv_text  ).
+
+            lr_text = lr_grid_1->create_text( row     = lv_row
+                                              column  = 1
+                                              text    = lv_text
+                                              tooltip = lv_text  ).
+
+            lr_grid_1->create_text( row     = lv_row
+                                    column  = 3
+                                    text    = ls_alv-carrname
+                                    tooltip = ls_alv-carrname ).
+
+          WHEN OTHERS.
+            IF lv_rest IS NOT INITIAL.
+              lv_text  = lr_column->get_medium_text(  ).
+              lr_label = lr_grid_1->create_label( row     = lv_row
+                                                  column  = 1
+                                                  text    = lv_text
+                                                  tooltip = lv_text  ).
+
+              lr_text = lr_grid_1->create_text( row     = lv_row
+                                                column  = 2
+                                                text    = <lv_value>
+                                                tooltip = <lv_value> ).
+
+            ELSE.
+              lv_text  = lr_column->get_medium_text(  ).
+              lr_label = lr_grid_2->create_label( row     = lv_row
+                                                  column  = 1
+                                                  text    = lv_text
+                                                  tooltip = lv_text  ).
+
+              lr_text = lr_grid_2->create_text( row     = lv_row
+                                                column  = 2
+                                                text    = <lv_value>
+                                                tooltip = <lv_value> ).
+
+            ENDIF.
+        ENDCASE.
+
+        lr_label->set_label_for( lr_text ).
+
+      ENDLOOP.
+
+    ELSE.
+      CONCATENATE 'TOP_OF_PAGE' 'FLIGHTS' INTO lv_text SEPARATED BY space.
+
+      lr_grid->create_header_information( row     = 1
+                                          column  = 1
+                                          text    = lv_text
+                                          tooltip = lv_text ).
+
+      lr_grid->add_row(  ).
+
+      lr_grid_1 = lr_grid->create_grid( row    = 3
+                                        column = 1 ).
+
+      lr_label = lr_grid_1->create_label( row     = 1
+                                          column  = 1
+                                          text    = 'G1 R1 C1'
+                                          tooltip = 'G1 R1 C1' ).
+
+      lr_text = lr_grid_1->create_text( row     = 1
+                                        column  = 2
+                                        text    = 'G1 R1 C2'
+                                        tooltip = 'G1 R1 C2' ).
+
+      lr_label->set_label_for( lr_text ).
+
+      lr_label = lr_grid_1->create_label( row     = 2
+                                          column  = 1
+                                          text    = 'G1 R2 C1'
+                                          tooltip = 'G1 R2 C1' ).
+
+      lr_text = lr_grid_1->create_text( row     = 2
+                                        column  = 2
+                                        text    = 'G1 R2 C2'
+                                        tooltip = 'G1 R2 C2' ).
+
+      lr_label->set_label_for( lr_text ).
+
+      IF page IS NOT INITIAL.
+        lr_label = lr_grid_1->create_label( row     = 1
+                                            column  = 3
+                                            text    = 'G1 R1 C3'
+                                            tooltip = 'G1 R2 C3' ).
+
+        lr_text = lr_grid_1->create_text( row     = 1
+                                          column  = 4
+                                          text    = page
+                                          tooltip = page ).
+      ENDIF.
+    ENDIF.
+
+    lr_content = lr_grid.
+
+    r_top_of_page->set_content( lr_content ).
+
+  ENDMETHOD. "on_top_of_page
+
+  METHOD set_aggregations.
+    DATA lr_aggregations TYPE REF TO cl_salv_aggregations.
+
+    TRY.
+        lr_aggregations = lr_hierseq->get_aggregations( 2 ).
+      CATCH cx_salv_not_found.
+    ENDTRY.
+
+    TRY.
+        lr_aggregations->add_aggregation( 'PRICE' ).
+      CATCH cx_salv_not_found cx_salv_data_error cx_salv_existing.
+    ENDTRY.
+
+  ENDMETHOD. "set_aggregations
+
+  METHOD set_columns.
+    DATA: lr_column  TYPE REF TO cl_salv_column_hierseq,
+          lr_columns TYPE REF TO cl_salv_columns_hierseq,
+
+          lr_level   TYPE REF TO cl_salv_hierseq_level.
+
+    TRY.
+        lr_columns = lr_hierseq->get_columns( 1 ).
+      CATCH cx_salv_not_found.
+    ENDTRY.
+
+    hide_column( iv_columname = 'MANDT' ir_columns = lr_columns ).
+
+    TRY.
+        lr_columns->set_expand_column( 'EXPAND' ).
+      CATCH cx_salv_data_error.
+    ENDTRY.
+
+    TRY.
+        lr_level = lr_hierseq->get_level( 1 ).
+      CATCH cx_salv_not_found.
+    ENDTRY.
+
+    lr_level->set_items_expanded( ).
+
+    set_sorts( ).
+
+    TRY.
+        lr_columns = lr_hierseq->get_columns( 2 ).
+      CATCH cx_salv_not_found.
+    ENDTRY.
+
+    hide_column( iv_columname = 'MANDT' ir_columns = lr_columns ).
+    hide_column( iv_columname = 'FLOAT_FI' ir_columns = lr_columns ).
+    hide_column( iv_columname = 'STRING_F' ir_columns = lr_columns ).
+    hide_column( iv_columname = 'XSTRING' ir_columns = lr_columns ).
+    hide_column( iv_columname = 'INT_FIEL' ir_columns = lr_columns ).
+    hide_column( iv_columname = 'HEX_FIEL' ir_columns = lr_columns ).
+    hide_column( iv_columname = 'DROPDOWN' ir_columns = lr_columns ).
+    hide_column( iv_columname = 'TAB_INDEX' ir_columns = lr_columns ).
+
+    set_aggregations(  ).
+
+  ENDMETHOD. "set_columns
+
+  METHOD set_events.
+    DATA lr_events TYPE REF TO cl_salv_events_hierseq.
+
+    lr_events = lr_hierseq->get_event(  ).
+
+    SET HANDLER gr_report->on_top_of_page FOR lr_events.
+    SET HANDLER gr_report->on_end_of_page FOR lr_events.
+
+  ENDMETHOD. "set_events
+
+  METHOD set_functional_settings.
+    DATA: lr_functional_settings TYPE REF TO cl_salv_functional_settings,
+          lr_tooltips             TYPE REF TO cl_salv_tooltips,
+          lv_value               TYPE lvc_value.
+
+    lr_functional_settings = lr_hierseq->get_functional_settings(  ).
+
+    lr_tooltips = lr_functional_settings->get_tooltips(  ).
+
+    TRY.
+        lr_tooltips->add_tooltip(
+          type       = cl_salv_tooltip=>c_type_exception
+          value      = '1'
+          tooltip    = 'My Red Light Tooltip' ).
+      CATCH cx_salv_existing.
+    ENDTRY.
+
+    TRY.
+        lr_tooltips->add_tooltip(
+          type       = cl_salv_tooltip=>c_type_exception
+          value      = '2'
+          tooltip    = 'My Yellow Light Tooltip' ).
+      CATCH cx_salv_existing.
+    ENDTRY.
+
+    TRY.
+        lr_tooltips->add_tooltip(
+          type       = cl_salv_tooltip=>c_type_exception
+          value      = '3'
+          tooltip    = 'My Green Light Tooltip' ).
+      CATCH cx_salv_existing.
+    ENDTRY.
+
+    TRY.
+        lv_value = icon_overview.
+        lr_tooltips->add_tooltip(
+          type    = cl_salv_tooltip=>c_type_icon
+          value   = lv_value
+          tooltip = 'Details' ).
+      CATCH cx_salv_existing.
+    ENDTRY.
+
+    TRY.
+        lv_value = icon_cancel.
+        lr_tooltips->add_tooltip(
+          type    = cl_salv_tooltip=>c_type_icon
+          value   = lv_value
+          tooltip = 'Failure' ).
+      CATCH cx_salv_existing.
+    ENDTRY.
+
+    TRY.
+        lv_value = icon_okay.
+        lr_tooltips->add_tooltip(
+          type    = cl_salv_tooltip=>c_type_icon
+          value   = lv_value
+          tooltip = 'No Problem' ).
+      CATCH cx_salv_existing.
+    ENDTRY.
+
+    TRY.
+        lv_value = icon_refresh.
+        lr_tooltips->add_tooltip(
+          type    = cl_salv_tooltip=>c_type_icon
+          value   = lv_value
+          tooltip = 'My Refresh Button' ).
+      CATCH cx_salv_existing.
+    ENDTRY.
+
+    TRY.
+        lv_value = sym_locked.
+        lr_tooltips->add_tooltip(
+          type    = cl_salv_tooltip=>c_type_symbol
+          value   = lv_value
+          tooltip = 'Locked' ).
+      CATCH cx_salv_existing.
+    ENDTRY.
+
+    TRY.
+        lv_value = sym_unlocked.
+        lr_tooltips->add_tooltip(
+          type    = cl_salv_tooltip=>c_type_symbol
+          value   = lv_value
+          tooltip = 'Unlocked' ).
+      CATCH cx_salv_existing.
+    ENDTRY.
+
+  ENDMETHOD. "set_functional_settings
+
+  METHOD set_functions.
+    DATA lr_functions TYPE REF TO cl_salv_functions.
+
+    lr_functions = lr_hierseq->get_functions(  ).
+    lr_functions->set_all( abap_true ).
+
+    set_functional_settings(  ).
+
+  ENDMETHOD. "set_functions
+
+  METHOD set_sorts.
+    DATA lr_sorts TYPE REF TO cl_salv_sorts.
+
+    TRY.
+        lr_sorts = lr_hierseq->get_sorts( 1 ).
+      CATCH cx_salv_not_found.
+    ENDTRY.
+
+    lr_sorts->set_group_active( ).
+
+    TRY.
+        lr_sorts->add_sort(
+          columnname = 'CARRID'
+          subtotal   = abap_true ).
+      CATCH cx_salv_not_found cx_salv_existing cx_salv_data_error.
+    ENDTRY.
+
+    TRY.
+        lr_sorts->add_sort(
+          columnname = 'CONNID'
+          subtotal   = abap_true
+          group      = if_salv_c_sort=>group_with_newpage ).
+      CATCH cx_salv_not_found cx_salv_existing cx_salv_data_error.
+    ENDTRY.
+
+  ENDMETHOD. "set_sorts
+
+ENDCLASS.
+
+START-OF-SELECTION.
+  CREATE OBJECT gr_report.
+  CALL METHOD gr_report->get_data.
+
+END-OF-SELECTION.
+  CALL METHOD gr_report->init_and_display_hierseq.
