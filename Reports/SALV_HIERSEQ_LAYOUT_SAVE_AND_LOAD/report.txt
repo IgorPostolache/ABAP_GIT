@@ -1,0 +1,229 @@
+*&---------------------------------------------------------------------*
+*& Report ZIP_P_TEST
+*&---------------------------------------------------------------------*
+*&
+*&---------------------------------------------------------------------*
+REPORT zip_p_test.
+
+CLASS lcl_report DEFINITION DEFERRED.
+
+TYPES: BEGIN OF ty_master.
+    INCLUDE    TYPE alv_chck.
+TYPES: expand TYPE char01,
+       END OF ty_master.
+
+CONSTANTS: BEGIN OF gc_s_alv_event,
+             print_eq_online TYPE i VALUE 1,
+             print_ne_online TYPE i VALUE 2,
+             print_no_online TYPE i VALUE 3,
+             online_no_print TYPE i VALUE 4,
+           END OF gc_s_alv_event,
+
+           con_master TYPE lvc_fname VALUE 'ALV_CHCK',
+           con_slave  TYPE lvc_fname VALUE 'ALV_T_T2'.
+
+DATA: gr_report TYPE REF TO lcl_report.
+
+PARAMETERS:
+  p_layout LIKE disvariant-variant.
+
+CLASS lcl_report DEFINITION.
+  PUBLIC SECTION.
+    METHODS:
+      init_and_display_hierseq,
+      f4_layout,
+      get_data.
+
+  PRIVATE SECTION.
+    DATA:
+      lt_master  TYPE STANDARD TABLE OF ty_master,
+      lt_slave   TYPE STANDARD TABLE OF alv_t_t2,
+
+      lt_binding TYPE salv_t_hierseq_binding,
+
+      lr_hierseq TYPE REF TO cl_salv_hierseq_table.
+
+    METHODS:
+      create_binding,
+      display_hierseq,
+      hide_column
+        IMPORTING
+          iv_columname TYPE lvc_fname
+          ir_columns   TYPE REF TO cl_salv_columns_hierseq,
+      set_columns,
+      set_events,
+      set_functions,
+      set_layout.
+ENDCLASS.
+
+CLASS lcl_report IMPLEMENTATION.
+
+  METHOD create_binding.
+    DATA: ls_binding TYPE salv_s_hierseq_binding.
+
+    ls_binding-master = 'MANDT'.
+    ls_binding-slave  = 'MANDT'.
+    APPEND ls_binding TO lt_binding.
+
+    ls_binding-master = 'CARRID'.
+    ls_binding-slave  = 'CARRID'.
+    APPEND ls_binding TO lt_binding.
+
+    ls_binding-master = 'CONNID'.
+    ls_binding-slave  = 'CONNID'.
+    APPEND ls_binding TO lt_binding.
+  ENDMETHOD. "create_binding
+
+  METHOD display_hierseq.
+    TRY.
+        cl_salv_hierseq_table=>factory(
+          EXPORTING
+            t_binding_level1_level2  = lt_binding
+          IMPORTING
+            r_hierseq                = lr_hierseq
+          CHANGING
+            t_table_level1           = lt_master
+            t_table_level2           = lt_slave ).
+      CATCH cx_salv_data_error cx_salv_not_found.
+    ENDTRY.
+
+*    lr_hierseq->set_screen_status( pfstatus   =  'SALV_STANDARD'
+*                                   report     =  sy-repid ).
+
+  ENDMETHOD. "display_hierseq
+
+  METHOD hide_column.
+    DATA: lr_column TYPE REF TO cl_salv_column.
+
+    TRY.
+        lr_column = ir_columns->get_column( iv_columname ).
+        lr_column->set_technical( if_salv_c_bool_sap=>true ).
+      CATCH cx_salv_not_found.
+    ENDTRY.
+
+  ENDMETHOD. "hide_column
+
+  METHOD init_and_display_hierseq.
+    create_binding(  ).
+    display_hierseq(  ).
+    set_columns(  ).
+    set_events(  ).
+    set_functions(  ).
+    set_layout(  ).
+    lr_hierseq->display(  ).
+  ENDMETHOD. "init_and_display_hierseq
+
+  METHOD f4_layout.
+    DATA: ls_layout TYPE salv_s_layout_info,
+          ls_key    TYPE salv_s_layout_key.
+
+    ls_key-report = sy-repid.
+
+    ls_layout = cl_salv_layout_service=>f4_layouts(
+      s_key    = ls_key
+      restrict = if_salv_c_layout=>restrict_none ).
+
+    p_layout = ls_layout-layout.
+
+  ENDMETHOD. "f4_layout
+
+  METHOD get_data.
+    DATA lt_aux_slave TYPE STANDARD TABLE OF alv_t_t2.
+
+    SELECT * FROM (con_master) INTO CORRESPONDING FIELDS OF TABLE lt_master UP TO 5 ROWS.
+
+    LOOP AT lt_master ASSIGNING FIELD-SYMBOL(<ls_master>).
+
+      SELECT * FROM (con_slave)
+        INTO TABLE lt_aux_slave
+            UP TO 5 ROWS
+                WHERE carrid = <ls_master>-carrid AND connid = <ls_master>-connid.
+
+      APPEND LINES OF lt_aux_slave TO lt_slave.
+
+    ENDLOOP.
+
+  ENDMETHOD. "get_data
+
+  METHOD set_columns.
+    DATA: lr_column  TYPE REF TO cl_salv_column_hierseq,
+          lr_columns TYPE REF TO cl_salv_columns_hierseq,
+
+          lr_level   TYPE REF TO cl_salv_hierseq_level.
+
+    TRY.
+        lr_columns = lr_hierseq->get_columns( 1 ).
+      CATCH cx_salv_not_found.
+    ENDTRY.
+
+    hide_column( iv_columname = 'MANDT' ir_columns = lr_columns ).
+
+    TRY.
+        lr_columns->set_expand_column( 'EXPAND' ).
+      CATCH cx_salv_data_error.
+    ENDTRY.
+
+    TRY.
+        lr_level = lr_hierseq->get_level( 1 ).
+      CATCH cx_salv_not_found.
+    ENDTRY.
+
+    lr_level->set_items_expanded( ).
+
+    TRY.
+        lr_columns = lr_hierseq->get_columns( 2 ).
+      CATCH cx_salv_not_found.
+    ENDTRY.
+
+    hide_column( iv_columname = 'MANDT' ir_columns = lr_columns ).
+    hide_column( iv_columname = 'FLOAT_FI' ir_columns = lr_columns ).
+    hide_column( iv_columname = 'STRING_F' ir_columns = lr_columns ).
+    hide_column( iv_columname = 'XSTRING' ir_columns = lr_columns ).
+    hide_column( iv_columname = 'INT_FIEL' ir_columns = lr_columns ).
+    hide_column( iv_columname = 'HEX_FIEL' ir_columns = lr_columns ).
+    hide_column( iv_columname = 'DROPDOWN' ir_columns = lr_columns ).
+    hide_column( iv_columname = 'TAB_INDEX' ir_columns = lr_columns ).
+
+  ENDMETHOD. "set_columns
+
+  METHOD set_events.
+    DATA lr_events TYPE REF TO cl_salv_events_hierseq.
+
+    lr_events = lr_hierseq->get_event(  ).
+
+  ENDMETHOD. "set_events
+
+  METHOD set_functions.
+    DATA lr_functions TYPE REF TO cl_salv_functions.
+
+    lr_functions = lr_hierseq->get_functions(  ).
+    lr_functions->set_all( abap_true ).
+
+  ENDMETHOD. "set_functions
+
+  METHOD set_layout.
+    DATA:
+      lv_layout TYPE REF TO cl_salv_layout,
+      ls_key    TYPE salv_s_layout_key.
+
+    lv_layout = lr_hierseq->get_layout(  ).
+    ls_key-report = sy-repid.
+    lv_layout->set_key( ls_key ).
+    lv_layout->set_initial_layout( p_layout ).
+    lv_layout->set_save_restriction( if_salv_c_layout=>restrict_none ).
+
+  ENDMETHOD. "set_layout
+
+ENDCLASS.
+
+INITIALIZATION.
+  CREATE OBJECT gr_report.
+
+AT SELECTION-SCREEN ON VALUE-REQUEST FOR p_layout.
+  CALL METHOD gr_report->f4_layout.
+
+START-OF-SELECTION.
+  CALL METHOD gr_report->get_data.
+
+END-OF-SELECTION.
+  CALL METHOD gr_report->init_and_display_hierseq.
