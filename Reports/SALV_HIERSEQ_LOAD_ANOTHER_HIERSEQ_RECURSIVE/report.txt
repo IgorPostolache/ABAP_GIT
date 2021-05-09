@@ -389,11 +389,18 @@ ENDCLASS. "lcl_hierseq
 CLASS lcl_report DEFINITION.
   PUBLIC SECTION.
     METHODS:
+      constructor.
+  PRIVATE SECTION.
+    METHODS:
       init_and_display_first_hierseq.
 
 ENDCLASS. "lcl_report
 
 CLASS lcl_report IMPLEMENTATION.
+
+  METHOD constructor.
+    init_and_display_first_hierseq(  ).
+  ENDMETHOD. "constructor
 
   METHOD init_and_display_first_hierseq.
     CREATE OBJECT gr_first_hierseq.
@@ -403,6 +410,3 @@ ENDCLASS. "lcl_report
 
 INITIALIZATION.
   CREATE OBJECT gr_report.
-
-END-OF-SELECTION.
-  CALL METHOD gr_report->init_and_display_first_hierseq.
