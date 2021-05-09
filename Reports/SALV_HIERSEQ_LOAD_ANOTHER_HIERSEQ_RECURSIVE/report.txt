@@ -1,0 +1,408 @@
+*&---------------------------------------------------------------------*
+*& Report ZIP_P_TEST
+*&---------------------------------------------------------------------*
+*&
+*&---------------------------------------------------------------------*
+REPORT zip_p_test.
+
+CLASS lcl_report DEFINITION DEFERRED.
+CLASS lcl_hierseq DEFINITION DEFERRED.
+CLASS lcl_second_hierseq DEFINITION DEFERRED.
+
+TYPES: BEGIN OF ty_master.
+    INCLUDE TYPE alv_chck.
+TYPES: expand TYPE char01,
+       END OF ty_master.
+
+CONSTANTS: BEGIN OF gc_s_alv_event,
+             print_eq_online TYPE i VALUE 1,
+             print_ne_online TYPE i VALUE 2,
+             print_no_online TYPE i VALUE 3,
+             online_no_print TYPE i VALUE 4,
+           END OF gc_s_alv_event,
+
+           con_master TYPE lvc_fname VALUE 'ALV_CHCK',
+           con_slave  TYPE lvc_fname VALUE 'ALV_T_T2'.
+
+DATA:
+  gr_report             TYPE REF TO lcl_report,
+
+  gr_first_hierseq      TYPE REF TO lcl_hierseq,
+  gr_second_hierseq     TYPE REF TO lcl_second_hierseq,
+
+  gr_first_hierseq_tab  TYPE REF TO cl_salv_hierseq_table,
+  gr_second_hierseq_tab TYPE REF TO cl_salv_hierseq_table.
+
+CLASS lcl_second_hierseq DEFINITION.
+  PUBLIC SECTION.
+    METHODS:
+      constructor.
+
+  PRIVATE SECTION.
+    DATA:
+      lt_master  TYPE STANDARD TABLE OF ty_master,
+      lt_slave   TYPE STANDARD TABLE OF alv_t_t2,
+
+      lt_binding TYPE salv_t_hierseq_binding.
+
+    METHODS:
+      create_binding,
+      display_hierseq,
+      get_data,
+      hide_column
+        IMPORTING
+          iv_columname TYPE lvc_fname
+          ir_columns   TYPE REF TO cl_salv_columns_hierseq,
+      on_user_command FOR EVENT added_function OF cl_salv_events
+        IMPORTING e_salv_function,
+      set_columns,
+      set_events,
+      set_functions.
+
+ENDCLASS. "lcl_second_hierseq
+
+CLASS lcl_second_hierseq IMPLEMENTATION.
+
+  METHOD constructor.
+    get_data(  ).
+    create_binding(  ).
+    display_hierseq(  ).
+    set_columns(  ).
+    set_events(  ).
+    set_functions(  ).
+    gr_second_hierseq_tab->display(  ).
+  ENDMETHOD.
+
+  METHOD create_binding.
+    DATA: ls_binding TYPE salv_s_hierseq_binding.
+
+    ls_binding-master = 'MANDT'.
+    ls_binding-slave  = 'MANDT'.
+    APPEND ls_binding TO lt_binding.
+
+    ls_binding-master = 'CARRID'.
+    ls_binding-slave  = 'CARRID'.
+    APPEND ls_binding TO lt_binding.
+
+    ls_binding-master = 'CONNID'.
+    ls_binding-slave  = 'CONNID'.
+    APPEND ls_binding TO lt_binding.
+  ENDMETHOD. "create_binding
+
+  METHOD display_hierseq.
+    TRY.
+        cl_salv_hierseq_table=>factory(
+          EXPORTING
+            t_binding_level1_level2  = lt_binding
+          IMPORTING
+            r_hierseq                = gr_second_hierseq_tab
+          CHANGING
+            t_table_level1           = lt_master
+            t_table_level2           = lt_slave ).
+      CATCH cx_salv_data_error cx_salv_not_found.
+    ENDTRY.
+
+    gr_second_hierseq_tab->set_screen_status( pfstatus   =  'SALV_STANDARD'
+                                   report     =  sy-repid ).
+
+  ENDMETHOD. "display_hierseq
+
+  METHOD get_data.
+
+    DATA lt_aux_slave TYPE STANDARD TABLE OF alv_t_t2.
+
+    SELECT * FROM (con_master) INTO CORRESPONDING FIELDS OF TABLE lt_master UP TO 2 ROWS.
+
+    LOOP AT lt_master ASSIGNING FIELD-SYMBOL(<ls_master>).
+
+      SELECT * FROM (con_slave)
+        INTO TABLE lt_aux_slave
+            UP TO 5 ROWS
+                WHERE carrid = <ls_master>-carrid AND connid = <ls_master>-connid.
+
+      APPEND LINES OF lt_aux_slave TO lt_slave.
+
+    ENDLOOP.
+
+  ENDMETHOD. "get_data
+
+  METHOD hide_column.
+    DATA: lr_column TYPE REF TO cl_salv_column.
+
+    TRY.
+        lr_column = ir_columns->get_column( iv_columname ).
+        lr_column->set_technical( if_salv_c_bool_sap=>true ).
+      CATCH cx_salv_not_found.
+    ENDTRY.
+
+  ENDMETHOD. "hide_column
+
+  METHOD on_user_command.
+    CASE e_salv_function.
+      WHEN 'LOAD'.
+        gr_second_hierseq_tab->close_screen(  ).
+    ENDCASE.
+  ENDMETHOD. "on_user_command
+
+  METHOD set_columns.
+    DATA: lr_column  TYPE REF TO cl_salv_column_hierseq,
+          lr_columns TYPE REF TO cl_salv_columns_hierseq,
+
+          lr_level   TYPE REF TO cl_salv_hierseq_level.
+
+    TRY.
+        lr_columns = gr_second_hierseq_tab->get_columns( 1 ).
+      CATCH cx_salv_not_found.
+    ENDTRY.
+
+    hide_column( iv_columname = 'MANDT' ir_columns = lr_columns ).
+
+    TRY.
+        lr_columns->set_expand_column( 'EXPAND' ).
+      CATCH cx_salv_data_error.
+    ENDTRY.
+
+    TRY.
+        lr_level = gr_second_hierseq_tab->get_level( 1 ).
+      CATCH cx_salv_not_found.
+    ENDTRY.
+
+    lr_level->set_items_expanded( ).
+
+    TRY.
+        lr_columns = gr_second_hierseq_tab->get_columns( 2 ).
+      CATCH cx_salv_not_found.
+    ENDTRY.
+
+    hide_column( iv_columname = 'MANDT' ir_columns = lr_columns ).
+    hide_column( iv_columname = 'FLOAT_FI' ir_columns = lr_columns ).
+    hide_column( iv_columname = 'STRING_F' ir_columns = lr_columns ).
+    hide_column( iv_columname = 'XSTRING' ir_columns = lr_columns ).
+    hide_column( iv_columname = 'INT_FIEL' ir_columns = lr_columns ).
+    hide_column( iv_columname = 'HEX_FIEL' ir_columns = lr_columns ).
+    hide_column( iv_columname = 'DROPDOWN' ir_columns = lr_columns ).
+    hide_column( iv_columname = 'TAB_INDEX' ir_columns = lr_columns ).
+
+  ENDMETHOD. "set_columns
+
+  METHOD set_events.
+    DATA lr_events  TYPE REF TO cl_salv_events_hierseq.
+
+    lr_events  = gr_second_hierseq_tab->get_event(  ).
+
+    SET HANDLER gr_second_hierseq->on_user_command FOR lr_events.
+
+  ENDMETHOD. "set_events
+
+  METHOD set_functions.
+    DATA lr_functions TYPE REF TO cl_salv_functions.
+
+    lr_functions = gr_second_hierseq_tab->get_functions(  ).
+    lr_functions->set_all( abap_true ).
+
+  ENDMETHOD. "set_functions
+
+ENDCLASS. "lcl_second_hierseq
+
+CLASS lcl_hierseq DEFINITION.
+  PUBLIC SECTION.
+    METHODS:
+      constructor,
+      close_screen_hierseq.
+
+  PRIVATE SECTION.
+    DATA:
+      lt_master  TYPE STANDARD TABLE OF ty_master,
+      lt_slave   TYPE STANDARD TABLE OF alv_t_t2,
+
+      lt_binding TYPE salv_t_hierseq_binding.
+
+    METHODS:
+      create_binding,
+      display_hierseq,
+      get_data,
+      hide_column
+        IMPORTING
+          iv_columname TYPE lvc_fname
+          ir_columns   TYPE REF TO cl_salv_columns_hierseq,
+      init_and_display_sec_hierseq,
+      on_user_command FOR EVENT added_function OF cl_salv_events
+        IMPORTING e_salv_function,
+      set_columns,
+      set_events,
+      set_functions.
+
+ENDCLASS. "lcl_hierseq
+
+CLASS lcl_hierseq IMPLEMENTATION.
+
+  METHOD constructor.
+    get_data(  ).
+    create_binding(  ).
+    display_hierseq(  ).
+    set_columns(  ).
+    set_events(  ).
+    set_functions(  ).
+    gr_first_hierseq_tab->display(  ).
+  ENDMETHOD.
+
+  METHOD create_binding.
+    DATA: ls_binding TYPE salv_s_hierseq_binding.
+
+    ls_binding-master = 'MANDT'.
+    ls_binding-slave  = 'MANDT'.
+    APPEND ls_binding TO lt_binding.
+
+    ls_binding-master = 'CARRID'.
+    ls_binding-slave  = 'CARRID'.
+    APPEND ls_binding TO lt_binding.
+
+    ls_binding-master = 'CONNID'.
+    ls_binding-slave  = 'CONNID'.
+    APPEND ls_binding TO lt_binding.
+  ENDMETHOD. "create_binding
+
+  METHOD close_screen_hierseq.
+    gr_first_hierseq_tab->close_screen(  ).
+  ENDMETHOD. "close_screen_hierseq
+
+  METHOD display_hierseq.
+    TRY.
+        cl_salv_hierseq_table=>factory(
+          EXPORTING
+            t_binding_level1_level2  = lt_binding
+          IMPORTING
+            r_hierseq                = gr_first_hierseq_tab
+          CHANGING
+            t_table_level1           = lt_master
+            t_table_level2           = lt_slave ).
+      CATCH cx_salv_data_error cx_salv_not_found.
+    ENDTRY.
+
+    gr_first_hierseq_tab->set_screen_status( pfstatus   =  'SALV_STANDARD'
+                                   report     =  sy-repid ).
+
+  ENDMETHOD. "display_hierseq
+
+  METHOD get_data.
+
+    DATA lt_aux_slave TYPE STANDARD TABLE OF alv_t_t2.
+
+    SELECT * FROM (con_master) INTO CORRESPONDING FIELDS OF TABLE lt_master UP TO 1 ROWS.
+
+    LOOP AT lt_master ASSIGNING FIELD-SYMBOL(<ls_master>).
+
+      SELECT * FROM (con_slave)
+        INTO TABLE lt_aux_slave
+            UP TO 5 ROWS
+                WHERE carrid = <ls_master>-carrid AND connid = <ls_master>-connid.
+
+      APPEND LINES OF lt_aux_slave TO lt_slave.
+
+    ENDLOOP.
+
+  ENDMETHOD. "get_data
+
+  METHOD hide_column.
+    DATA: lr_column TYPE REF TO cl_salv_column.
+
+    TRY.
+        lr_column = ir_columns->get_column( iv_columname ).
+        lr_column->set_technical( if_salv_c_bool_sap=>true ).
+      CATCH cx_salv_not_found.
+    ENDTRY.
+
+  ENDMETHOD. "hide_column
+
+  METHOD init_and_display_sec_hierseq.
+    gr_first_hierseq_tab->close_screen(  ).
+    CREATE OBJECT gr_second_hierseq.
+  ENDMETHOD. "init_and_display_sec_hierseq
+
+  METHOD on_user_command.
+    CASE e_salv_function.
+      WHEN 'LOAD'.
+        CREATE OBJECT gr_second_hierseq.
+    ENDCASE.
+  ENDMETHOD. "on_user_command
+
+  METHOD set_columns.
+    DATA: lr_column  TYPE REF TO cl_salv_column_hierseq,
+          lr_columns TYPE REF TO cl_salv_columns_hierseq,
+
+          lr_level   TYPE REF TO cl_salv_hierseq_level.
+
+    TRY.
+        lr_columns = gr_first_hierseq_tab->get_columns( 1 ).
+      CATCH cx_salv_not_found.
+    ENDTRY.
+
+    hide_column( iv_columname = 'MANDT' ir_columns = lr_columns ).
+
+    TRY.
+        lr_columns->set_expand_column( 'EXPAND' ).
+      CATCH cx_salv_data_error.
+    ENDTRY.
+
+    TRY.
+        lr_level = gr_first_hierseq_tab->get_level( 1 ).
+      CATCH cx_salv_not_found.
+    ENDTRY.
+
+    lr_level->set_items_expanded( ).
+
+    TRY.
+        lr_columns = gr_first_hierseq_tab->get_columns( 2 ).
+      CATCH cx_salv_not_found.
+    ENDTRY.
+
+    hide_column( iv_columname = 'MANDT' ir_columns = lr_columns ).
+    hide_column( iv_columname = 'FLOAT_FI' ir_columns = lr_columns ).
+    hide_column( iv_columname = 'STRING_F' ir_columns = lr_columns ).
+    hide_column( iv_columname = 'XSTRING' ir_columns = lr_columns ).
+    hide_column( iv_columname = 'INT_FIEL' ir_columns = lr_columns ).
+    hide_column( iv_columname = 'HEX_FIEL' ir_columns = lr_columns ).
+    hide_column( iv_columname = 'DROPDOWN' ir_columns = lr_columns ).
+    hide_column( iv_columname = 'TAB_INDEX' ir_columns = lr_columns ).
+
+  ENDMETHOD. "set_columns
+
+  METHOD set_events.
+    DATA lr_events  TYPE REF TO cl_salv_events_hierseq.
+
+    lr_events  = gr_first_hierseq_tab->get_event(  ).
+
+    SET HANDLER gr_first_hierseq->on_user_command  FOR lr_events.
+
+  ENDMETHOD. "set_events
+
+  METHOD set_functions.
+    DATA lr_functions TYPE REF TO cl_salv_functions.
+
+    lr_functions = gr_first_hierseq_tab->get_functions(  ).
+    lr_functions->set_all( abap_true ).
+
+  ENDMETHOD. "set_functions
+
+ENDCLASS. "lcl_hierseq
+
+CLASS lcl_report DEFINITION.
+  PUBLIC SECTION.
+    METHODS:
+      init_and_display_first_hierseq.
+
+ENDCLASS. "lcl_report
+
+CLASS lcl_report IMPLEMENTATION.
+
+  METHOD init_and_display_first_hierseq.
+    CREATE OBJECT gr_first_hierseq.
+  ENDMETHOD. "init_and_display_first_hierseq
+
+ENDCLASS. "lcl_report
+
+INITIALIZATION.
+  CREATE OBJECT gr_report.
+
+END-OF-SELECTION.
+  CALL METHOD gr_report->init_and_display_first_hierseq.
