@@ -30,7 +30,9 @@ CLASS lcl_report IMPLEMENTATION.
         APPEND INITIAL LINE TO lt_sflight ASSIGNING FIELD-SYMBOL(<ls_new_sflight>).
         IF <ls_new_sflight> IS ASSIGNED.
           MOVE <ls_sflight> TO <ls_new_sflight>.
-          WRITE '20211231' TO <ls_sflight>-fldate.
+          ASSIGN COMPONENT 'FLDATE' OF STRUCTURE <ls_sflight> TO FIELD-SYMBOL(<lv_fldate>).
+          WRITE '20211231' TO <lv_fldate>.
+          UNASSIGN <lv_fldate>.
           <ls_new_sflight>-fldate = sy-datum.
           UNASSIGN <ls_new_sflight>.
         ENDIF.
