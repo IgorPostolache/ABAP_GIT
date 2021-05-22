@@ -1,0 +1,61 @@
+*&---------------------------------------------------------------------*
+*& Report ZIP_P_TEST
+*&---------------------------------------------------------------------*
+*&
+*&---------------------------------------------------------------------*
+REPORT zip_p_test.
+
+CLASS lcl_report DEFINITION DEFERRED.
+
+DATA:
+  gr_report TYPE REF TO lcl_report.
+
+CLASS lcl_report DEFINITION.
+  PUBLIC SECTION.
+    METHODS:
+      constructor.
+
+ENDCLASS. "lcl_report
+
+CLASS lcl_report IMPLEMENTATION.
+
+  METHOD constructor.
+    SELECT * FROM sflight INTO TABLE @DATA(lt_sflight) UP TO 5 ROWS.
+
+    WRITE:/ 'Total rows, before appending: ', lines( lt_sflight ) COLOR 5.
+    WRITE:/ sy-uline.
+
+    LOOP AT lt_sflight ASSIGNING FIELD-SYMBOL(<ls_sflight>).
+      IF <ls_sflight>-fldate = '20170420'.
+        APPEND INITIAL LINE TO lt_sflight ASSIGNING FIELD-SYMBOL(<ls_new_sflight>).
+        IF <ls_new_sflight> IS ASSIGNED.
+          MOVE <ls_sflight> TO <ls_new_sflight>.
+          WRITE '20211231' TO <ls_sflight>-fldate.
+          <ls_new_sflight>-fldate = sy-datum.
+          UNASSIGN <ls_new_sflight>.
+        ENDIF.
+        WRITE:/ <ls_sflight>-fldate COLOR 4, ' <==== MODIFIED'.
+      ELSE.
+        WRITE:/ <ls_sflight>-fldate.
+
+      ENDIF.
+
+    ENDLOOP.
+
+    WRITE:/ sy-uline.
+    WRITE:/ 'Total rows, after appending: ', lines( lt_sflight ) COLOR 6.
+    WRITE:/ sy-uline.
+
+    LOOP AT lt_sflight ASSIGNING <ls_sflight>.
+      IF <ls_sflight>-fldate EQ sy-datum.
+        WRITE:/ <ls_sflight>-fldate COLOR 3, ' <==== APPENDED'.
+      ELSE.
+        WRITE:/ <ls_sflight>-fldate.
+      ENDIF.
+    ENDLOOP.
+  ENDMETHOD. "constructor
+
+ENDCLASS. "lcl_report
+
+INITIALIZATION.
+  CREATE OBJECT gr_report.
