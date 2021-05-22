@@ -37,7 +37,6 @@ CLASS lcl_report IMPLEMENTATION.
         WRITE:/ <ls_sflight>-fldate COLOR 4, ' <==== MODIFIED'.
       ELSE.
         WRITE:/ <ls_sflight>-fldate.
-
       ENDIF.
 
     ENDLOOP.
@@ -48,7 +47,10 @@ CLASS lcl_report IMPLEMENTATION.
 
     LOOP AT lt_sflight ASSIGNING <ls_sflight>.
       IF <ls_sflight>-fldate EQ sy-datum.
-        WRITE:/ <ls_sflight>-fldate COLOR 3, ' <==== APPENDED'.
+        READ TABLE lt_sflight ASSIGNING FIELD-SYMBOL(<ls_added_sflight>) WITH KEY fldate = sy-datum.
+        IF sy-subrc EQ 0.
+          WRITE:/ <ls_added_sflight>-fldate COLOR 3, ' <==== APPENDED'.
+        ENDIF.
       ELSE.
         WRITE:/ <ls_sflight>-fldate.
       ENDIF.
